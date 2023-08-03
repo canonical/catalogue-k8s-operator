@@ -8,11 +8,16 @@
 
 import json
 import logging
+import os
+import socket
+from typing import cast
+from urllib.parse import urlparse
 
 from charms.catalogue_k8s.v0.catalogue import (
     CatalogueItemsChangedEvent,
     CatalogueProvider,
 )
+from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.observability_libs.v1.kubernetes_service_patch import KubernetesServicePatch
 from charms.traefik_k8s.v1.ingress import (
     IngressPerAppReadyEvent,
@@ -30,6 +35,11 @@ logger = logging.getLogger(__name__)
 ROOT_PATH = "/web"
 CONFIG_PATH = ROOT_PATH + "/config.json"
 
+CATALOGUE_CERTS_DIR = "/etc/catalogue/certs"
+CERT_PATH = os.path.join(CATALOGUE_CERTS_DIR, "catalogue.cert.pem")
+KEY_PATH = os.path.join(CATALOGUE_CERTS_DIR, "catalogue.key.pem")
+CA_CERT_PATH = os.path.join(CATALOGUE_CERTS_DIR, "ca.cert")
+
 
 class CatalogueCharm(CharmBase):
     """Charm the service."""
@@ -38,6 +48,7 @@ class CatalogueCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+        self._container = self.unit.get_container("catalogue")
         self.name = "catalogue-k8s"
 
         port = ServicePort(80, name=f"{self.app.name}")
@@ -45,6 +56,15 @@ class CatalogueCharm(CharmBase):
 
         self._info = CatalogueProvider(charm=self)
         self._ingress = IngressPerAppRequirer(charm=self, port=80, strip_prefix=True)
+
+        url = self.hostname
+        extra_sans_dns = [cast(str, urlparse(url).hostname)] if url else None
+        self.server_cert = CertHandler(
+            self,
+            key="catalogue-server-cert",
+            peer_relation_name="replicas",
+            extra_sans_dns=extra_sans_dns,
+        )
 
         self.framework.observe(
             self.on.catalogue_pebble_ready, self._on_catalogue_pebble_ready  # pyright: ignore
@@ -57,6 +77,10 @@ class CatalogueCharm(CharmBase):
         self.framework.observe(self._ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
         self.framework.observe(
             self._ingress.on.revoked, self._on_ingress_revoked  # pyright: ignore
+        )
+        self.framework.observe(
+            self.server_cert.on.cert_changed,  # pyright: ignore
+            self._on_server_cert_changed,
         )
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
@@ -96,14 +120,31 @@ class CatalogueCharm(CharmBase):
             self.app.status = status
         self.unit.status = status
 
-    def _on_upgrade(self, event):
+    def _on_upgrade(self, _):
         self.configure(self.items)
 
-    def _on_config_changed(self, event):
+    def _on_config_changed(self, _):
         self.configure(self.items)
 
     def _on_items_changed(self, event: CatalogueItemsChangedEvent):
         self.configure(event.items)
+
+    def _on_server_cert_changed(self, _):
+        self._push_certs()
+        self.configure(self.items)
+
+    def _push_certs(self):
+        for path in [KEY_PATH, CERT_PATH, CA_CERT_PATH]:
+            self._container.remove_path(path, recursive=True)
+
+        if self.server_cert.ca:
+            self._container.push(CA_CERT_PATH, self.server_cert.ca, make_dirs=True)
+
+        if self.server_cert.cert:
+            self._container.push(CERT_PATH, self.server_cert.cert, make_dirs=True)
+
+        if self.server_cert.key:
+            self._container.push(KEY_PATH, self.server_cert.key, make_dirs=True)
 
     def configure(self, items):
         """Reconfigures the catalogue, writing a new config file to the workload."""
@@ -141,6 +182,11 @@ class CatalogueCharm(CharmBase):
             "description": self.model.config.get("description", ""),
             "links": json.loads(self.model.config["links"]),
         }
+
+    @property
+    def hostname(self) -> str:
+        """Unit's hostname."""
+        return socket.getfqdn()
 
 
 if __name__ == "__main__":
