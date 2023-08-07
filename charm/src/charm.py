@@ -28,8 +28,8 @@ from nginx_config import CA_CERT_PATH, CERT_PATH, KEY_PATH, NGINX_CONFIG_PATH, N
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus
-from ops.pebble import Layer
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.pebble import ChangeError, Error, Layer
 
 logger = logging.getLogger(__name__)
 
@@ -121,35 +121,85 @@ class CatalogueCharm(CharmBase):
 
     def _configure(self, items):
         if not self.workload.can_connect():
+            self.unit.status = WaitingStatus("Waiting for Pebble ready")
             return
 
-        self._configure_web_server()
-        self.workload.add_layer(self.name, self._pebble_layer, combine=True)
+        self.framework.breakpoint()
+        nginx_config_changed = self._update_web_server_config()
+        catalogue_config_changed = self._update_catalogue_config(items)
+        pebble_layer_changed = self._update_pebble_layer()
+        restart = any([nginx_config_changed, catalogue_config_changed, pebble_layer_changed])
 
-        # TODO: Reload the workload only configs files change
-        self.workload.restart(self.name)
-
-        try:
-            if self.workload.exists(CONFIG_PATH):
-                self.workload.remove_path(CONFIG_PATH)
-
-            logger.info("Configuring %s application entries", len(items))
-
-            self.workload.push(
-                CONFIG_PATH,
-                json.dumps({**self.charm_config, "apps": items}),
-                make_dirs=True,
-            )
-        except:  # noqa TODO: catch a specific exception
-            self._update_status(BlockedStatus("Failed to write configuration"))
+        if restart:
+            try:
+                self.workload.restart(self.name)
+            except ChangeError as e:
+                msg = f"Failed to restart Catalogue: {e}"
+                self.unit.status = BlockedStatus(msg)
+                logger.error(msg)
+                return
 
         if self.unit.is_leader():
             self._update_status(ActiveStatus())
 
-    def _configure_web_server(self):
+    def _update_pebble_layer(self) -> bool:
+        current_layer = self.workload.get_plan()
+
+        if current_layer.services == self._pebble_layer.services:
+            return False
+
+        self.workload.add_layer(self.name, self._pebble_layer, combine=True)
+        self.workload.autostart()
+        return True
+
+    def _update_catalogue_config(self, items) -> bool:
+        config = {**self.charm_config, "apps": items}
+
+        if self._running_catalogue_config == config:
+            return False
+
+        self.workload.push(
+            CONFIG_PATH,
+            json.dumps({**self.charm_config, "apps": items}),
+            make_dirs=True,
+        )
+        logger.info("Configuring %s application entries", len(items))
+        return True
+
+    def _update_web_server_config(self) -> bool:
         config = NginxConfigBuilder(self._tls_enabled).build()
+
+        if self._running_nginx_config == config:
+            return False
+
         self.workload.push(NGINX_CONFIG_PATH, config, make_dirs=True)
-        logger.info("Configuring nginx web server.")
+        logger.info("Configuring NGINX web server.")
+        return True
+
+    @property
+    def _running_nginx_config(self) -> str:
+        """Get the on-disk Nginx config."""
+        if not self.workload.can_connect():
+            return ""
+
+        try:
+            self.framework.breakpoint()
+            return str(self.workload.pull(NGINX_CONFIG_PATH, encoding="utf-8").read())
+        except (FileNotFoundError, Error) as e:
+            logger.error("Failed to retrieve Nginx config %s", e)
+            return ""
+
+    @property
+    def _running_catalogue_config(self) -> dict:
+        """Get the on-disk Catalogue config."""
+        if not self.workload.can_connect():
+            return {}
+
+        try:
+            return json.loads(self.workload.pull(CONFIG_PATH, encoding="utf-8").read())
+        except (FileNotFoundError, Error) as e:
+            logger.error("Failed to retrieve Catalogue config %s", e)
+            return {}
 
     @property
     def _pebble_layer(self) -> Layer:
@@ -161,7 +211,7 @@ class CatalogueCharm(CharmBase):
                     self.name: {
                         "override": "replace",
                         "summary": "catalogue",
-                        "command": f"nginx -c {NGINX_CONFIG_PATH}",
+                        "command": f"nginx -g 'daemon off;' -c {NGINX_CONFIG_PATH}",
                         "startup": "enabled",
                     }
                 },
