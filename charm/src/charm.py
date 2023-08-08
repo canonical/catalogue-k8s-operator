@@ -21,15 +21,13 @@ from charms.observability_libs.v1.kubernetes_service_patch import KubernetesServ
 from charms.traefik_k8s.v1.ingress import (
     IngressPerAppReadyEvent,
     IngressPerAppRequirer,
-    IngressPerAppRevokedEvent,
 )
 from lightkube.models.core_v1 import ServicePort
 from nginx_config import CA_CERT_PATH, CERT_PATH, KEY_PATH, NGINX_CONFIG_PATH, NginxConfigBuilder
 from ops.charm import CharmBase
-from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
-from ops.pebble import ChangeError, Error, Layer
+from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +36,7 @@ CONFIG_PATH = ROOT_PATH + "/config.json"
 
 
 class CatalogueCharm(CharmBase):
-    """Charm the service."""
-
-    _stored = StoredState()
+    """Catalogue charm class."""
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -81,11 +77,10 @@ class CatalogueCharm(CharmBase):
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
         logger.info("This app's ingress URL: %s", event.url)
 
-    def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent):
+    def _on_ingress_revoked(self, _):
         logger.info("This app no longer has ingress")
 
     def _on_catalogue_pebble_ready(self, _):
-        """Event handler for the pebble ready event."""
         self._configure(self.items)
 
     def _update_status(self, status):
@@ -103,8 +98,7 @@ class CatalogueCharm(CharmBase):
         self._configure(event.items)
 
     def _on_server_cert_changed(self, _):
-        self._push_certs()
-        self._configure(self.items)
+        self._configure(self.items, push_certs=True)
 
     def _push_certs(self):
         for path in [KEY_PATH, CERT_PATH, CA_CERT_PATH]:
@@ -119,12 +113,23 @@ class CatalogueCharm(CharmBase):
         if self.server_cert.key:
             self.workload.push(KEY_PATH, self.server_cert.key, make_dirs=True)
 
-    def _configure(self, items):
+    def _configure(self, items, push_certs: bool = False):
         if not self.workload.can_connect():
-            self.unit.status = WaitingStatus("Waiting for Pebble ready")
+            self._update_status(WaitingStatus("Waiting for Pebble ready"))
             return
 
-        self.framework.breakpoint()
+        if push_certs:
+            try:
+                self._push_certs()
+            except (ProtocolError, PathError) as e:
+                self._update_status(BlockedStatus(str(e)))
+                logger.error(str(e))
+                return
+            except Exception as e:
+                self._update_status(BlockedStatus(str(e)))
+                logger.error(str(e))
+                return
+
         nginx_config_changed = self._update_web_server_config()
         catalogue_config_changed = self._update_catalogue_config(items)
         pebble_layer_changed = self._update_pebble_layer()
@@ -135,7 +140,7 @@ class CatalogueCharm(CharmBase):
                 self.workload.restart(self.name)
             except ChangeError as e:
                 msg = f"Failed to restart Catalogue: {e}"
-                self.unit.status = BlockedStatus(msg)
+                self._update_status(BlockedStatus(msg))
                 logger.error(msg)
                 return
 
@@ -183,7 +188,6 @@ class CatalogueCharm(CharmBase):
             return ""
 
         try:
-            self.framework.breakpoint()
             return str(self.workload.pull(NGINX_CONFIG_PATH, encoding="utf-8").read())
         except (FileNotFoundError, Error) as e:
             logger.error("Failed to retrieve Nginx config %s", e)

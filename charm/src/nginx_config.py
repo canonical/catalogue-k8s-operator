@@ -81,7 +81,7 @@ class NginxConfigBuilder:
         )
 
     def build(self):
-        """Build."""
+        """Build Nginx config file."""
         if self._tls:
             return self._nginx_config(HTTPS_SERVICE)
 
