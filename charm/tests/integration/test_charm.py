@@ -58,8 +58,5 @@ async def test_tls(ops_test: OpsTest):
 
     address = await get_unit_address(ops_test, APP_NAME, 0)
     url = f"https://{address}/"
-    try:
-        response = requests.get(url, verify=False)
-        assert response.status_code == 200
-    except requests.exceptions.RequestException:
-        assert False is True
+    response = requests.get(url, verify=False)
+    assert response.status_code == 200
