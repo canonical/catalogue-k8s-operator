@@ -40,7 +40,7 @@ class CatalogueCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.name = "catalogue"
+        self.name = "catalogue"  # container, layer, service
 
         port = ServicePort(80, name=f"{self.app.name}")
         self.service_patcher = KubernetesServicePatch(self, [port])
