@@ -121,11 +121,7 @@ class CatalogueCharm(CharmBase):
         if push_certs:
             try:
                 self._push_certs()
-            except (ProtocolError, PathError) as e:
-                self._update_status(BlockedStatus(str(e)))
-                logger.error(str(e))
-                return
-            except Exception as e:
+            except (ProtocolError, PathError, Exception) as e:
                 self._update_status(BlockedStatus(str(e)))
                 logger.error(str(e))
                 return
