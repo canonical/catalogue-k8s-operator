@@ -53,7 +53,7 @@ async def test_tls(ops_test: OpsTest):
             trust=True,
         ),
     )
-    await asyncio.gather(ops_test.model.add_relation(APP_NAME, ssc_app_name))
+    await ops_test.model.add_relation(APP_NAME, ssc_app_name)
     await ops_test.model.wait_for_idle(apps=app_names, status="active")
 
     address = await get_unit_address(ops_test, APP_NAME, 0)
