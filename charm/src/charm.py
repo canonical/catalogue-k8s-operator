@@ -113,7 +113,7 @@ class CatalogueCharm(CharmBase):
         if self.server_cert.key:
             self.workload.push(KEY_PATH, self.server_cert.key, make_dirs=True)
 
-    def _configure(self, items, push_certs: bool = False):
+    def _configure(self, items, push_certs: bool = True):
         if not self.workload.can_connect():
             self._update_status(WaitingStatus("Waiting for Pebble ready"))
             return
