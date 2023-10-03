@@ -12,7 +12,7 @@ import socket
 from typing import cast
 from urllib.parse import urlparse
 
-from charms.catalogue_k8s.v0.catalogue import (
+from charms.catalogue_k8s.v1.catalogue import (
     CatalogueItemsChangedEvent,
     CatalogueProvider,
 )
