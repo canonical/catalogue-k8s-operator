@@ -48,13 +48,11 @@ class CatalogueCharm(CharmBase):
         self._info = CatalogueProvider(charm=self)
         self._ingress = IngressPerAppRequirer(charm=self, port=80, strip_prefix=True)
 
-        url = self.hostname
-        extra_sans_dns = [cast(str, urlparse(url).hostname)] if url else None
         self.server_cert = CertHandler(
             self,
             key="catalogue-server-cert",
             peer_relation_name="replicas",
-            extra_sans_dns=extra_sans_dns,
+            extra_sans_dns=[socket.getfqdn()],
         )
 
         self.framework.observe(
@@ -249,11 +247,6 @@ class CatalogueCharm(CharmBase):
             "description": self.model.config.get("description", ""),
             "links": json.loads(self.model.config["links"]),
         }
-
-    @property
-    def hostname(self) -> str:
-        """Unit's hostname."""
-        return socket.getfqdn()
 
     def _is_tls_ready(self) -> bool:
         """Returns True if the workload is ready to operate in TLS mode."""
