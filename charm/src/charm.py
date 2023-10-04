@@ -81,7 +81,10 @@ class CatalogueCharm(CharmBase):
         logger.info("This app no longer has ingress")
 
     def _on_catalogue_pebble_ready(self, _):
-        self._configure(self.items)
+        # We set push_certs to True here to cover the upgrade sequence. When upgrade-charm fires,
+        # the container may not yet be ready, and the certs are written to non-persistent storage
+        # (which is a good thing).
+        self._configure(self.items, push_certs=True)
 
     def _update_status(self, status):
         if self.unit.is_leader():
@@ -89,6 +92,8 @@ class CatalogueCharm(CharmBase):
         self.unit.status = status
 
     def _on_upgrade(self, _):
+        # Ideally we would want to push certs on upgrade, but at this point we can't know for sure
+        # if pebble-ready (can_connect guard).
         self._configure(self.items)
 
     def _on_config_changed(self, _):
