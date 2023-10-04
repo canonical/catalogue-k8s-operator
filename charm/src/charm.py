@@ -18,7 +18,7 @@ from charms.catalogue_k8s.v0.catalogue import (
 )
 from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.observability_libs.v1.kubernetes_service_patch import KubernetesServicePatch
-from charms.traefik_k8s.v1.ingress import (
+from charms.traefik_k8s.v2.ingress import (
     IngressPerAppReadyEvent,
     IngressPerAppRequirer,
 )
@@ -100,6 +100,11 @@ class CatalogueCharm(CharmBase):
     def _on_server_cert_changed(self, _):
         self._configure(self.items, push_certs=True)
 
+        # When server cert changes we need to update the scheme we inform traefik.
+        parsed = urlparse(self._internal_url)
+        port = parsed.port or 80 if parsed.scheme == "http" else 443
+        self._ingress.provide_ingress_requirements(scheme=parsed.scheme, port=port)
+
     def _push_certs(self):
         for path in [KEY_PATH, CERT_PATH, CA_CERT_PATH]:
             self.workload.remove_path(path, recursive=True)
@@ -168,7 +173,7 @@ class CatalogueCharm(CharmBase):
         return True
 
     def _update_web_server_config(self) -> bool:
-        config = NginxConfigBuilder(self._tls_enabled).build()
+        config = NginxConfigBuilder(self._is_tls_ready()).build()
 
         if self._running_nginx_config == config:
             return False
@@ -245,9 +250,22 @@ class CatalogueCharm(CharmBase):
         """Unit's hostname."""
         return socket.getfqdn()
 
+    def _is_tls_ready(self) -> bool:
+        """Returns True if the workload is ready to operate in TLS mode."""
+        return (
+            self.workload.can_connect()
+            and self.server_cert.enabled
+            and self.workload.exists(CERT_PATH)
+            and self.workload.exists(KEY_PATH)
+            and self.workload.exists(CA_CERT_PATH)
+        )
+
     @property
-    def _tls_enabled(self) -> bool:
-        return self.server_cert.enabled and self.workload.exists(CERT_PATH)
+    def _internal_url(self) -> str:
+        """Return the fqdn dns-based in-cluster (private) address of the catalogue server."""
+        scheme = "https" if self._is_tls_ready() else "http"
+        port = 80 if scheme == "http" else 443
+        return f"{scheme}://{socket.getfqdn()}:{port}"
 
 
 if __name__ == "__main__":
