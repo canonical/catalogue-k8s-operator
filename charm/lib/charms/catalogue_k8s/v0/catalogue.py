@@ -6,8 +6,9 @@
 import ipaddress
 import logging
 import socket
-from typing import List, Optional, Union
 import warnings
+from typing import List, Optional, Union
+
 from ops.charm import CharmBase
 from ops.framework import BoundEvent, EventBase, EventSource, Object, ObjectEvents
 
@@ -60,7 +61,6 @@ class CatalogueConsumer(Object):
             "For more details, see https://github.com/canonical/catalogue-k8s-operator/issues/41.",
             category=DeprecationWarning,
         )
-
 
     def _register_refresh_event(
         self, refresh_event: Optional[Union[BoundEvent, List[BoundEvent]]] = None
