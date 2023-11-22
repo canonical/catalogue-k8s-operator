@@ -5,14 +5,13 @@
 
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+from urllib.parse import urlparse
 
 from charm import CatalogueCharm
 from charms.catalogue_k8s.v1.catalogue import DEFAULT_RELATION_NAME
 from ops.model import ActiveStatus
 from ops.testing import Harness
-from unittest.mock import patch, Mock
-from urllib.parse import urlparse
 
 CONTAINER_NAME = "catalogue"
 
@@ -77,8 +76,7 @@ class TestCharm(unittest.TestCase):
 
     def test_server_cert(self):
         # Test with TLS
-        self.harness.charm.server_cert = Mock(
-            ca="mock_ca", cert="mock_cert", key="mock_key")
+        self.harness.charm.server_cert = Mock(ca="mock_ca", cert="mock_cert", key="mock_key")
         self.harness.charm._on_server_cert_changed(None)
 
         internal_url = urlparse(self.harness.charm._internal_url)
@@ -108,8 +106,10 @@ class TestCharm(unittest.TestCase):
         # Test with ingress ready
         self.harness.charm._info = MockInfo()
         self.harness.charm._on_ingress_ready(Mock(url="https://testingress.com"))
-        
-        mock_logger.info.assert_called_with("This app's ingress URL: %s", 'https://testingress.com')
+
+        mock_logger.info.assert_called_with(
+            "This app's ingress URL: %s", "https://testingress.com"
+        )
         mock_configure.assert_called_with({"name": "dummyname"}, push_certs=True)
 
         mock_logger.reset_mock()

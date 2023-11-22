@@ -4,6 +4,7 @@
 
 
 import asyncio
+import json
 import logging
 from pathlib import Path
 
@@ -12,7 +13,6 @@ import requests
 import yaml
 from helpers import get_unit_address, run_juju_ssh_command
 from pytest_operator.plugin import OpsTest
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
     # Then it should eventually go idle/active
 
     charm = await ops_test.build_charm(".")
-    resources = {
-        "catalogue-image": METADATA["resources"]["catalogue-image"]["upstream-source"]}
+    resources = {"catalogue-image": METADATA["resources"]["catalogue-image"]["upstream-source"]}
     await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
 
     # issuing dummy update_status just to trigger an event
@@ -81,10 +80,12 @@ async def test_app_integration(ops_test: OpsTest):
         apps=[APP_NAME, alert_app_name], status="active", raise_on_blocked=True, timeout=1000
     )
     # retrieve the content of /web/config.json which holds application data in the catalogue
-    new_config = await run_juju_ssh_command(model_full_name=ops_test.model_full_name,
-                                      container_name="catalogue",
-                                      unit_name= f"{APP_NAME}/0",
-                                      command="cat /web/config.json",)
+    new_config = await run_juju_ssh_command(
+        model_full_name=ops_test.model_full_name,
+        container_name="catalogue",
+        unit_name=f"{APP_NAME}/0",
+        command="cat /web/config.json",
+    )
     config_dict = json.loads(new_config)
-    first_app_name = config_dict['apps'][0]['name']
-    assert first_app_name == 'Alertmanager'
+    first_app_name = config_dict["apps"][0]["name"]
+    assert first_app_name == "Alertmanager"
