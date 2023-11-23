@@ -100,7 +100,7 @@ class TestCharm(unittest.TestCase):
             @property
             def items(self):
                 return {
-                    "name": "dummyname",
+                    "name": "test_value",
                 }
 
         # Test with ingress ready
@@ -110,7 +110,7 @@ class TestCharm(unittest.TestCase):
         mock_logger.info.assert_called_with(
             "This app's ingress URL: %s", "https://testingress.com"
         )
-        mock_configure.assert_called_with({"name": "dummyname"}, push_certs=True)
+        mock_configure.assert_called_with({"name": "test_value"}, push_certs=True)
 
         mock_logger.reset_mock()
         mock_configure.reset_mock()
