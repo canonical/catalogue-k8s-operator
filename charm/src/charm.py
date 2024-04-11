@@ -9,7 +9,7 @@
 import json
 import logging
 import socket
-from typing import Optional
+from typing import Optional, cast
 from urllib.parse import urlparse
 
 from charms.catalogue_k8s.v1.catalogue import (
@@ -265,7 +265,7 @@ class CatalogueCharm(CharmBase):
             "title": self.model.config["title"],
             "tagline": self.model.config["tagline"],
             "description": self.model.config.get("description", ""),
-            "links": json.loads(self.model.config["links"]),
+            "links": json.loads(cast(str, self.model.config["links"])),
         }
 
     def _is_tls_ready(self) -> bool:
