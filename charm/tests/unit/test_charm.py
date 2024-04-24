@@ -80,7 +80,9 @@ class TestCharm(unittest.TestCase):
 
     def test_server_cert(self):
         # Test with TLS
-        self.harness.charm.server_cert = Mock(ca_cert="mock_ca", server_cert="mock_cert", private_key="mock_key")
+        self.harness.charm.server_cert = Mock(
+            ca_cert="mock_ca", server_cert="mock_cert", private_key="mock_key"
+        )
         self.harness.charm._on_server_cert_changed(None)
 
         internal_url = urlparse(self.harness.charm._internal_url)
