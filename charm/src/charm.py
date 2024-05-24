@@ -16,17 +16,15 @@ from charms.catalogue_k8s.v1.catalogue import (
     CatalogueItemsChangedEvent,
     CatalogueProvider,
 )
-from charms.observability_libs.v0.cert_handler import CertHandler
-from charms.observability_libs.v1.kubernetes_service_patch import KubernetesServicePatch
+from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v2.ingress import (
     IngressPerAppReadyEvent,
     IngressPerAppRequirer,
 )
-from lightkube.models.core_v1 import ServicePort
 from nginx_config import CA_CERT_PATH, CERT_PATH, KEY_PATH, NGINX_CONFIG_PATH, NginxConfigBuilder
-from ops.charm import CharmBase
+from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
@@ -44,7 +42,6 @@ CONFIG_PATH = ROOT_PATH + "/config.json"
         CatalogueProvider,
         CertHandler,
         IngressPerAppRequirer,
-        KubernetesServicePatch,
     ),
 )
 class CatalogueCharm(CharmBase):
@@ -54,8 +51,7 @@ class CatalogueCharm(CharmBase):
         super().__init__(*args)
         self.name = "catalogue"  # container, layer, service
 
-        port = ServicePort(80, name=f"{self.app.name}")
-        self.service_patcher = KubernetesServicePatch(self, [port])
+        self.unit.set_ports(80)
 
         self._tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
 
@@ -64,8 +60,7 @@ class CatalogueCharm(CharmBase):
         self.server_cert = CertHandler(
             self,
             key="catalogue-server-cert",
-            peer_relation_name="replicas",
-            extra_sans_dns=[socket.getfqdn()],
+            sans=[socket.getfqdn()],
         )
         self._ingress = IngressPerAppRequirer(
             charm=self,
@@ -88,6 +83,23 @@ class CatalogueCharm(CharmBase):
         self.framework.observe(
             self.server_cert.on.cert_changed,  # pyright: ignore
             self._on_server_cert_changed,
+        )
+        self.framework.observe(self.on.get_url_action, self._get_url)
+
+    def _get_url(self, event: ActionEvent):
+        """Return the external hostname to be passed to ingress via the relation.
+
+        If we do not have an ingress, then use the pod dns name as hostname.
+        Relying on cluster's DNS service, those dns names are routable virtually
+        exclusively inside the cluster.
+        """
+        output = self._internal_url
+        if ingress_url := self._ingress.url:
+            output = ingress_url
+        event.set_results(
+            {
+                "url": output,
+            }
         )
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
@@ -132,14 +144,14 @@ class CatalogueCharm(CharmBase):
         for path in [KEY_PATH, CERT_PATH, CA_CERT_PATH]:
             self.workload.remove_path(path, recursive=True)
 
-        if self.server_cert.ca:
-            self.workload.push(CA_CERT_PATH, self.server_cert.ca, make_dirs=True)
+        if self.server_cert.ca_cert:
+            self.workload.push(CA_CERT_PATH, self.server_cert.ca_cert, make_dirs=True)
 
-        if self.server_cert.cert:
-            self.workload.push(CERT_PATH, self.server_cert.cert, make_dirs=True)
+        if self.server_cert.server_cert:
+            self.workload.push(CERT_PATH, self.server_cert.server_cert, make_dirs=True)
 
-        if self.server_cert.key:
-            self.workload.push(KEY_PATH, self.server_cert.key, make_dirs=True)
+        if self.server_cert.private_key:
+            self.workload.push(KEY_PATH, self.server_cert.private_key, make_dirs=True)
 
     def _configure(self, items, push_certs: bool = False):
         if not self.workload.can_connect():
