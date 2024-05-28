@@ -9,6 +9,8 @@
 import json
 import logging
 import socket
+import subprocess
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -37,7 +39,7 @@ CONFIG_PATH = ROOT_PATH + "/config.json"
 
 @trace_charm(
     tracing_endpoint="tracing_endpoint",
-    server_cert="server_cert_path",
+    server_cert="server_ca_cert_path",
     extra_types=(
         CatalogueProvider,
         CertHandler,
@@ -46,6 +48,8 @@ CONFIG_PATH = ROOT_PATH + "/config.json"
 )
 class CatalogueCharm(CharmBase):
     """Catalogue charm class."""
+
+    _ca_path = "/usr/local/share/ca-certificates/ca.crt"
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -146,12 +150,19 @@ class CatalogueCharm(CharmBase):
 
         if self.server_cert.ca_cert:
             self.workload.push(CA_CERT_PATH, self.server_cert.ca_cert, make_dirs=True)
+            # push CA certificate to charm container
+            ca_cert_path = Path(self._ca_path)
+            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
+            ca_cert_path.write_text(self.server_cert.ca_cert)
+            subprocess.run(["update-ca-certificates", "--fresh"], check=True)
 
         if self.server_cert.server_cert:
             self.workload.push(CERT_PATH, self.server_cert.server_cert, make_dirs=True)
 
         if self.server_cert.private_key:
             self.workload.push(KEY_PATH, self.server_cert.private_key, make_dirs=True)
+
+
 
     def _configure(self, items, push_certs: bool = False):
         if not self.workload.can_connect():
@@ -311,9 +322,9 @@ class CatalogueCharm(CharmBase):
         return None
 
     @property
-    def server_cert_path(self) -> Optional[str]:
-        """Server certificate path for tls tracing."""
-        return CERT_PATH
+    def server_ca_cert_path(self) -> Optional[str]:
+        """Server CA certificate path for tls tracing."""
+        return self._ca_path if self.server_cert.enabled else None
 
 
 if __name__ == "__main__":
