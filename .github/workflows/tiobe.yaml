@@ -15,4 +15,5 @@ jobs:
           ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
           installTics: true
           filelist: .
+          recalc: ALL
   
