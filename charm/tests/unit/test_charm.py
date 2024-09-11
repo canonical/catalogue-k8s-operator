@@ -10,11 +10,12 @@ import unittest
 from unittest.mock import Mock, patch
 from urllib.parse import urlparse
 
-from charm import CatalogueCharm
 from charms.catalogue_k8s.v1.catalogue import DEFAULT_RELATION_NAME
 from ops.charm import ActionEvent
 from ops.model import ActiveStatus
 from ops.testing import Harness
+
+from charm import CatalogueCharm
 
 CONTAINER_NAME = "catalogue"
 
