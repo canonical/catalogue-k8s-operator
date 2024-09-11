@@ -14,3 +14,5 @@ parts:
     charm-binary-python-packages: [cryptography, jsonschema]
     build-packages:
       - git
+      - rustc
+      - cargo
