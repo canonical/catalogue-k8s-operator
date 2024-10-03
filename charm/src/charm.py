@@ -11,20 +11,20 @@ import logging
 import socket
 import subprocess
 from pathlib import Path
-from typing import Optional, cast
+from typing import cast
 from urllib.parse import urlparse
 
-from charms.catalogue_k8s.v1.catalogue import CatalogueItemsChangedEvent, CatalogueProvider
-from charms.observability_libs.v1.cert_handler import CertHandler
-from charms.tempo_k8s.v1.charm_tracing import trace_charm
-from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
-from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
 
-from lib.charms.tempo_k8s.v2.tracing import charm_tracing_config
+from charms.catalogue_k8s.v1.catalogue import CatalogueItemsChangedEvent, CatalogueProvider
+from charms.observability_libs.v1.cert_handler import CertHandler
+from charms.tempo_k8s.v1.charm_tracing import trace_charm
+from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
+from charms.tempo_k8s.v2.tracing import charm_tracing_config
+from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from nginx_config import CA_CERT_PATH, CERT_PATH, KEY_PATH, NGINX_CONFIG_PATH, NginxConfigBuilder
 
 logger = logging.getLogger(__name__)
