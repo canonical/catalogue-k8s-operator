@@ -24,6 +24,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
 
+from lib.charms.tempo_k8s.v2.tracing import charm_tracing_config
 from nginx_config import CA_CERT_PATH, CERT_PATH, KEY_PATH, NGINX_CONFIG_PATH, NginxConfigBuilder
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ class CatalogueCharm(CharmBase):
 
         self._tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
 
+        self.tracing_endpoint, self.server_ca_cert_path = charm_tracing_config(self._tracing, self._ca_path)
         self._info = CatalogueProvider(charm=self)
 
         self.server_cert = CertHandler(
@@ -307,17 +309,6 @@ class CatalogueCharm(CharmBase):
         parsed_url = urlparse(self._internal_url)
         return int(parsed_url.port or 80)
 
-    @property
-    def tracing_endpoint(self) -> Optional[str]:
-        """Otlp http endpoint for charm instrumentation."""
-        if self._tracing.is_ready():
-            return self._tracing.get_endpoint("otlp_http")
-        return None
-
-    @property
-    def server_ca_cert_path(self) -> Optional[str]:
-        """Server CA certificate path for tls tracing."""
-        return self._ca_path if Path(self._ca_path).exists() else None
 
 
 if __name__ == "__main__":
