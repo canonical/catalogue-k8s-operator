@@ -14,17 +14,16 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import urlparse
 
+from charms.catalogue_k8s.v1.catalogue import CatalogueItemsChangedEvent, CatalogueProvider
+from charms.observability_libs.v1.cert_handler import CertHandler
+from charms.tempo_k8s.v1.charm_tracing import trace_charm
+from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer, charm_tracing_config
+from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
 
-from charms.catalogue_k8s.v1.catalogue import CatalogueItemsChangedEvent, CatalogueProvider
-from charms.observability_libs.v1.cert_handler import CertHandler
-from charms.tempo_k8s.v1.charm_tracing import trace_charm
-from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
-from charms.tempo_k8s.v2.tracing import charm_tracing_config
-from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from nginx_config import CA_CERT_PATH, CERT_PATH, KEY_PATH, NGINX_CONFIG_PATH, NginxConfigBuilder
 
 logger = logging.getLogger(__name__)
@@ -55,7 +54,9 @@ class CatalogueCharm(CharmBase):
 
         self._tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
 
-        self.tracing_endpoint, self.server_ca_cert_path = charm_tracing_config(self._tracing, self._ca_path)
+        self.tracing_endpoint, self.server_ca_cert_path = charm_tracing_config(
+            self._tracing, self._ca_path
+        )
         self._info = CatalogueProvider(charm=self)
 
         self.server_cert = CertHandler(
@@ -308,7 +309,6 @@ class CatalogueCharm(CharmBase):
         """Return the port extracted from the internal URL."""
         parsed_url = urlparse(self._internal_url)
         return int(parsed_url.port or 80)
-
 
 
 if __name__ == "__main__":
