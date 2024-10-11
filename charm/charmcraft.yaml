@@ -11,6 +11,6 @@ bases:
         channel: "20.04"
 parts:
   charm:
-    charm-binary-python-packages: [cryptography, jsonschema, pydantic-core]
+    charm-binary-python-packages: [cryptography, jsonschema, pydantic-core, maturin]
     build-packages:
       - git
