@@ -12,3 +12,7 @@ jobs:
     secrets: inherit
     with:
       charm-path: "charm"
+
+  terraform-checks:
+    name: Terraform
+    uses: canonical/observability/.github/workflows/terraform-quality-checks.yaml@main
