@@ -11,13 +11,13 @@ import logging
 import socket
 import subprocess
 from pathlib import Path
-from typing import Optional, cast
+from typing import cast
 from urllib.parse import urlparse
 
 from charms.catalogue_k8s.v1.catalogue import CatalogueItemsChangedEvent, CatalogueProvider
 from charms.observability_libs.v1.cert_handler import CertHandler
-from charms.tempo_k8s.v1.charm_tracing import trace_charm
-from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
+from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
@@ -54,6 +54,9 @@ class CatalogueCharm(CharmBase):
 
         self._tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
 
+        self.tracing_endpoint, self.server_ca_cert_path = charm_tracing_config(
+            self._tracing, self._ca_path
+        )
         self._info = CatalogueProvider(charm=self)
 
         self.server_cert = CertHandler(
@@ -306,18 +309,6 @@ class CatalogueCharm(CharmBase):
         """Return the port extracted from the internal URL."""
         parsed_url = urlparse(self._internal_url)
         return int(parsed_url.port or 80)
-
-    @property
-    def tracing_endpoint(self) -> Optional[str]:
-        """Otlp http endpoint for charm instrumentation."""
-        if self._tracing.is_ready():
-            return self._tracing.get_endpoint("otlp_http")
-        return None
-
-    @property
-    def server_ca_cert_path(self) -> Optional[str]:
-        """Server CA certificate path for tls tracing."""
-        return self._ca_path if Path(self._ca_path).exists() else None
 
 
 if __name__ == "__main__":
