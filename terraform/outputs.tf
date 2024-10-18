@@ -6,12 +6,12 @@ output "requires" {
   value = {
     certificates = "certificates",
     ingress      = "ingress",
-    tracing      = "tracing"
+    tracing      = "tracing",
   }
 }
 
 output "provides" {
   value = {
-    catalogue = "catalogue"
+    catalogue = "catalogue",
   }
 }
