@@ -14,7 +14,12 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import urlparse
 
-from charms.catalogue_k8s.v1.catalogue import CatalogueItemsChangedEvent, CatalogueProvider
+from charms.catalogue_k8s.v1.catalogue import (
+    CatalogueConsumer,
+    CatalogueItem,
+    CatalogueItemsChangedEvent,
+    CatalogueProvider,
+)
 from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
@@ -64,6 +69,20 @@ class CatalogueCharm(CharmBase):
             key="catalogue-server-cert",
             sans=[socket.getfqdn()],
         )
+
+        desc = f"A service catalogue containing {len(self._info.items)} items."
+
+        self._catalogue_consumer = CatalogueConsumer(
+            charm=self,
+            relation_name="catalogue-item",
+            item=CatalogueItem(
+                name=f"{self.model.config['title']}",
+                icon="book-open-blank-variant-outline",
+                url=self._ingress.url,
+                description=desc
+            ),
+        )
+
         self._ingress = IngressPerAppRequirer(
             charm=self,
             port=self._internal_port,
