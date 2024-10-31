@@ -188,8 +188,7 @@ class CatalogueCharm(CharmBase):
                 logger.error(msg)
                 return
 
-        if self.unit.is_leader():
-            self._update_status(ActiveStatus())
+        self._update_status(ActiveStatus())
 
     def _update_pebble_layer(self) -> bool:
         current_layer = self.workload.get_plan()
