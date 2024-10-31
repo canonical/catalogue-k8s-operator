@@ -72,17 +72,6 @@ class CatalogueCharm(CharmBase):
 
         desc = f"A service catalogue containing {len(self._info.items)} items."
 
-        self._catalogue_consumer = CatalogueConsumer(
-            charm=self,
-            relation_name="catalogue-item",
-            item=CatalogueItem(
-                name=f"{self.model.config['title']}",
-                icon="book-open-blank-variant-outline",
-                url=self._ingress.url,
-                description=desc
-            ),
-        )
-
         self._ingress = IngressPerAppRequirer(
             charm=self,
             port=self._internal_port,
@@ -90,17 +79,32 @@ class CatalogueCharm(CharmBase):
             redirect_https=True,
             scheme=lambda: urlparse(self._internal_url).scheme,
         )
+
+        self._catalogue_consumer = CatalogueConsumer(
+            charm=self,
+            relation_name="catalogue-item",
+            item=CatalogueItem(
+                name=f"{self.model.config['title']}",
+                icon="book-open-blank-variant-outline",
+                url=self._ingress.url or "about:blank",
+                description=desc,
+            ),
+        )
+
         self.framework.observe(
-            self.on.catalogue_pebble_ready, self._on_catalogue_pebble_ready  # pyright: ignore
+            self.on.catalogue_pebble_ready,
+            self._on_catalogue_pebble_ready,  # pyright: ignore
         )
         self.framework.observe(
-            self._info.on.items_changed, self._on_items_changed  # pyright: ignore
+            self._info.on.items_changed,
+            self._on_items_changed,  # pyright: ignore
         )
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self._ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
         self.framework.observe(
-            self._ingress.on.revoked, self._on_ingress_revoked  # pyright: ignore
+            self._ingress.on.revoked,
+            self._on_ingress_revoked,  # pyright: ignore
         )
         self.framework.observe(
             self.server_cert.on.cert_changed,  # pyright: ignore
