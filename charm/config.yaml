@@ -37,8 +37,8 @@ options:
           "category": "Social",
           "items": [
             {
-              "name": "Mattermost",
-              "url": "https://chat.charmhub.io",
+              "name": "Ubuntu Matrix Community",
+              "url": "https://matrix.to/#/#community:ubuntu.com",
               "target": "_blank"
             },
             {
