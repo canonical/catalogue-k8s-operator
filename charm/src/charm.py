@@ -68,6 +68,7 @@ class CatalogueCharm(CharmBase):
             charm=self,
             port=self._internal_port,
             strip_prefix=True,
+            redirect_https=True,
             scheme=lambda: urlparse(self._internal_url).scheme,
         )
         self.framework.observe(
