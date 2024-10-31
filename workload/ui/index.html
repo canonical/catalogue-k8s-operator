@@ -61,7 +61,8 @@
         <ul class="p-matrix" id="apps">
           {{! --- Apps --- }}
           {{#each apps}}
-             <li class="p-matrix__item">
+              <li class="p-matrix__item">
+			  {{#if name}}
               <div class="p-matrix__img">
                 <span class="iconify icon md-48" data-icon="mdi-{{icon}}"></span>
               </div>
@@ -71,7 +72,8 @@
                 <p class="p-matrix__desc">{{description}}</p>
                 {{/if}}  
               </div>
-            </li>
+			  {{/if}}
+              </li>
             {{/each}}
         </ul>
         {{else}}
