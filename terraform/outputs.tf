@@ -4,7 +4,7 @@ output "app_name" {
 
 output "endpoints" {
   value = {
-    catalogue = "catalogue",
+    catalogue    = "catalogue",
     certificates = "certificates",
     ingress      = "ingress",
     tracing      = "tracing",
