@@ -4,9 +4,12 @@ output "app_name" {
 
 output "endpoints" {
   value = {
-    catalogue    = "catalogue",
+    # Requires
     certificates = "certificates",
     ingress      = "ingress",
     tracing      = "tracing",
+    
+    # Provides
+    catalogue = "catalogue",
   }
 }
