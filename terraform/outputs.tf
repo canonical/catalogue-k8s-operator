@@ -8,7 +8,6 @@ output "endpoints" {
     certificates = "certificates",
     ingress      = "ingress",
     tracing      = "tracing",
-    
     # Provides
     catalogue = "catalogue",
   }
