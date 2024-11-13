@@ -2,16 +2,13 @@ output "app_name" {
   value = juju_application.catalogue.name
 }
 
-output "requires" {
+output "endpoints" {
   value = {
+    # Requires
     certificates = "certificates",
     ingress      = "ingress",
     tracing      = "tracing",
-  }
-}
-
-output "provides" {
-  value = {
+    # Provides
     catalogue = "catalogue",
   }
 }
