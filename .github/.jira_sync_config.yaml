@@ -8,7 +8,10 @@ settings:
   components:
     - catalogue
     - team-core
-      
+
+  labels:
+    - 25.04
+  
   add_gh_comment: false
   sync_description: false
   sync_comments: false
