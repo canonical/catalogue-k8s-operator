@@ -14,7 +14,12 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import urlparse
 
-from charms.catalogue_k8s.v1.catalogue import CatalogueItemsChangedEvent, CatalogueProvider
+from charms.catalogue_k8s.v1.catalogue import (
+    CatalogueConsumer,
+    CatalogueItem,
+    CatalogueItemsChangedEvent,
+    CatalogueProvider,
+)
 from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
@@ -64,6 +69,9 @@ class CatalogueCharm(CharmBase):
             key="catalogue-server-cert",
             sans=[socket.getfqdn()],
         )
+
+        desc = f"A service catalogue containing {len(self._info.items)} items."
+
         self._ingress = IngressPerAppRequirer(
             charm=self,
             port=self._internal_port,
@@ -71,17 +79,32 @@ class CatalogueCharm(CharmBase):
             redirect_https=True,
             scheme=lambda: urlparse(self._internal_url).scheme,
         )
+
+        self._catalogue_consumer = CatalogueConsumer(
+            charm=self,
+            relation_name="catalogue-item",
+            item=CatalogueItem(
+                name=f"{self.model.config['title']}",
+                icon="book-open-blank-variant-outline",
+                url=self._ingress.url or "about:blank",
+                description=desc,
+            ),
+        )
+
         self.framework.observe(
-            self.on.catalogue_pebble_ready, self._on_catalogue_pebble_ready  # pyright: ignore
+            self.on.catalogue_pebble_ready,
+            self._on_catalogue_pebble_ready,  # pyright: ignore
         )
         self.framework.observe(
-            self._info.on.items_changed, self._on_items_changed  # pyright: ignore
+            self._info.on.items_changed,
+            self._on_items_changed,  # pyright: ignore
         )
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self._ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
         self.framework.observe(
-            self._ingress.on.revoked, self._on_ingress_revoked  # pyright: ignore
+            self._ingress.on.revoked,
+            self._on_ingress_revoked,  # pyright: ignore
         )
         self.framework.observe(
             self.server_cert.on.cert_changed,  # pyright: ignore
