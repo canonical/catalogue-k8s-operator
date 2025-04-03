@@ -57,5 +57,4 @@ async def catalogue_charm(ops_test: OpsTest):
     if charm_file := os.environ.get("CHARM_PATH"):
         return Path(charm_file)
 
-    charm = await ops_test.build_charm(".")
-    return charm
+    return await ops_test.build_charm(".")
