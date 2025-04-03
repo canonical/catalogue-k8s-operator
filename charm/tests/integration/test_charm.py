@@ -6,7 +6,6 @@
 import asyncio
 import json
 import logging
-import os
 from pathlib import Path
 
 import pytest
@@ -27,14 +26,13 @@ app_names = [APP_NAME, ssc_app_name]
 
 
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest):
+async def test_build_and_deploy(ops_test: OpsTest, catalogue_charm):
     assert ops_test.model
     # Given a fresh build of the charm
     # When deploying it
     # Then it should eventually go idle/active
-    charm = os.environ.get("CHARM_PATH", await ops_test.build_charm("."))
     resources = {"catalogue-image": METADATA["resources"]["catalogue-image"]["upstream-source"]}
-    await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
+    await ops_test.model.deploy(catalogue_charm, resources=resources, application_name=APP_NAME)
 
     # issuing dummy update_status just to trigger an event
     async with ops_test.fast_forward():
