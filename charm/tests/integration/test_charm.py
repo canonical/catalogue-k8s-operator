@@ -27,6 +27,7 @@ app_names = [APP_NAME, ssc_app_name]
 
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest):
+    assert ops_test.model
     # Given a fresh build of the charm
     # When deploying it
     # Then it should eventually go idle/active
@@ -48,6 +49,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
 
 async def test_tls(ops_test: OpsTest):
+    assert ops_test.model
     await asyncio.gather(
         ops_test.model.deploy(
             "ch:self-signed-certificates",
@@ -66,6 +68,8 @@ async def test_tls(ops_test: OpsTest):
 
 
 async def test_app_integration(ops_test: OpsTest):
+    assert ops_test.model
+    assert ops_test.model_full_name
     await asyncio.gather(
         ops_test.model.deploy(
             prometheus_app_name,

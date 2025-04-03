@@ -120,7 +120,7 @@ class TestCharm(unittest.TestCase):
                 }
 
         # Test with ingress ready
-        self.harness.charm._info = MockInfo()
+        self.harness.charm._info = MockInfo()  # pyright: ignore
         self.harness.charm._on_ingress_ready(Mock(url="https://testingress.com"))
 
         mock_logger.info.assert_called_with(
@@ -132,7 +132,7 @@ class TestCharm(unittest.TestCase):
         mock_configure.reset_mock()
 
         # Test with ingress revoked
-        self.harness.charm._info = None
+        self.harness.charm._info = None  # pyright: ignore
         self.harness.charm._on_ingress_revoked(None)
 
         mock_logger.info.assert_called_with("This app no longer has ingress")
