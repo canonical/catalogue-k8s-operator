@@ -52,7 +52,7 @@ async def test_tls(ops_test: OpsTest):
         ops_test.model.deploy(
             "self-signed-certificates",
             application_name=ssc_app_name,
-            channel="edge",
+            channel="latest/edge",
             trust=True,
         ),
     )
