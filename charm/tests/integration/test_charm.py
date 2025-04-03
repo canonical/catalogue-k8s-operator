@@ -50,7 +50,7 @@ async def test_tls(ops_test: OpsTest):
     assert ops_test.model
     await asyncio.gather(
         ops_test.model.deploy(
-            "ch:self-signed-certificates",
+            "self-signed-certificates",
             application_name=ssc_app_name,
             channel="edge",
             trust=True,
