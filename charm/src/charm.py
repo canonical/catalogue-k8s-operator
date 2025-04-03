@@ -311,7 +311,7 @@ class CatalogueCharm(CharmBase):
         }
 
     def _is_tls_ready(self) -> bool:
-        """Returns True if the workload is ready to operate in TLS mode."""
+        """Return True if the workload is ready to operate in TLS mode."""
         return (
             self.workload.can_connect()
             and self.server_cert.enabled
