@@ -6,6 +6,7 @@
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 
 import pytest
@@ -31,8 +32,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
     # Given a fresh build of the charm
     # When deploying it
     # Then it should eventually go idle/active
-
-    charm = await ops_test.build_charm(".")
+    charm = os.environ.get("CHARM_PATH", await ops_test.build_charm("."))
     resources = {"catalogue-image": METADATA["resources"]["catalogue-image"]["upstream-source"]}
     await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
 
