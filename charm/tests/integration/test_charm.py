@@ -16,7 +16,7 @@ from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 APP_NAME = METADATA["name"]
 
 ssc_app_name = "ssc"
@@ -26,14 +26,13 @@ app_names = [APP_NAME, ssc_app_name]
 
 
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest):
+async def test_build_and_deploy(ops_test: OpsTest, catalogue_charm):
+    assert ops_test.model
     # Given a fresh build of the charm
     # When deploying it
     # Then it should eventually go idle/active
-
-    charm = await ops_test.build_charm(".")
     resources = {"catalogue-image": METADATA["resources"]["catalogue-image"]["upstream-source"]}
-    await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
+    await ops_test.model.deploy(catalogue_charm, resources=resources, application_name=APP_NAME)
 
     # issuing dummy update_status just to trigger an event
     async with ops_test.fast_forward():
@@ -48,11 +47,12 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
 
 async def test_tls(ops_test: OpsTest):
+    assert ops_test.model
     await asyncio.gather(
         ops_test.model.deploy(
-            "ch:self-signed-certificates",
+            "self-signed-certificates",
             application_name=ssc_app_name,
-            channel="edge",
+            channel="latest/edge",
             trust=True,
         ),
     )
@@ -66,6 +66,8 @@ async def test_tls(ops_test: OpsTest):
 
 
 async def test_app_integration(ops_test: OpsTest):
+    assert ops_test.model
+    assert ops_test.model_full_name
     await asyncio.gather(
         ops_test.model.deploy(
             prometheus_app_name,

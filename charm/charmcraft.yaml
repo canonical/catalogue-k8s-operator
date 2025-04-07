@@ -1,16 +1,124 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
-
+name: catalogue-k8s
 type: charm
-bases:
-  - build-on:
-      - name: "ubuntu"
-        channel: "20.04"
-    run-on:
-      - name: "ubuntu"
-        channel: "20.04"
+summary: Catalogue for discovering charm UIs
+description: |
+  The catalogue is a charmed operator helping users to locate the user
+  interfaces of the charms related to it.
+
+links:
+  website: https://charmhub.io/catalogue-k8s
+  source: https://github.com/canonical/catalogue-k8s-operator
+  issues: https://github.com/canonical/catalogue-k8s-operator/issues
+
+assumes:
+  - k8s-api
+
+platforms:
+  ubuntu@20.04:amd64:
+  ubuntu@24.04:amd64:
+
 parts:
   charm:
-    charm-binary-python-packages: [cryptography, jsonschema, pydantic>=2]
-    build-packages:
-      - git
+    source: .
+    plugin: uv
+    build-packages: [git]
+    build-snaps: [astral-uv]
+    # FIXME: at pack time, the parent folder doesn't exist (including the '.git' folder)
+    override-build: |
+      craftctl default
+      # git describe --always .. > $CRAFT_PART_INSTALL/version
+
+containers:
+  catalogue:
+    resource: catalogue-image
+
+resources:
+  catalogue-image:
+    type: oci-image
+    description: OCI image for the service catalogue
+    upstream-source: ghcr.io/canonical/catalogue-k8s-operator:latest
+
+provides:
+  catalogue:
+    interface: catalogue
+
+requires:
+    catalogue-item:
+        interface: catalogue
+        description: |
+          Add this catalogue to the index of another catalogue instance.
+    ingress:
+        interface: ingress
+        limit: 1
+    certificates:
+        interface: tls-certificates
+        limit: 1
+        description: |
+          Certificate and key files for the Catalogue web.
+    tracing:
+        interface: tracing
+        limit: 1
+
+peers:
+  replicas:
+    interface: catalogue_replica
+
+config:
+  options:
+    title:
+      type: string
+      description: Title to display in the navigation bar.
+      default: Service Catalogue
+
+    tagline:
+      type: string
+      description: |
+        A one-liner that communicates the core value or purpose of the 
+        bundle it is part of.
+      default: Easy access to Charmed UIs
+
+    description:
+      type: string
+      description: |
+        A somewhat longer description of the bundle or set of charms the
+        catalogue is displaying.
+    
+    links:
+      type: string
+      description: |
+        JSON string containing the links to display in the catalogue. 
+        Contains links to Charmhub, Mattermost and Discourse by default.
+      default: |
+        [
+          {
+            "category": "Documentation",
+            "items": [
+              {
+                "name": "Charmhub",
+                "url": "https://charmhub.io"
+              }
+            ]
+          },
+          {
+            "category": "Social",
+            "items": [
+              {
+                "name": "Ubuntu Matrix Community",
+                "url": "https://matrix.to/#/#community:ubuntu.com",
+                "target": "_blank"
+              },
+              {
+                "name": "Discourse",
+                "url": "https://discourse.charmhub.io",
+                "target": "_blank"
+              }
+            ]
+          }
+        ]
+
+actions:
+  get-url:
+    description: |
+      Gets the external endpoint of the workload in case its proxied by an ingress. Otherwise, returns the workload's cluster fqdn.
