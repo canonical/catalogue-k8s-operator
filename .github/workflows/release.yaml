@@ -12,3 +12,4 @@ jobs:
     secrets: inherit
     with:
       charm-path: charm
+      default-track: 1
