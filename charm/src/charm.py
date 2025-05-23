@@ -14,10 +14,9 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import urlparse
 
-from charms.catalogue_k8s.v1.catalogue import (
+from charms.catalogue_k8s.v2.catalogue import (
     CatalogueConsumer,
     CatalogueItem,
-    CatalogueItemsChangedEvent,
     CatalogueProvider,
 )
 from charms.observability_libs.v1.cert_handler import CertHandler
@@ -62,15 +61,12 @@ class CatalogueCharm(CharmBase):
         self.tracing_endpoint, self.server_ca_cert_path = charm_tracing_config(
             self._tracing, self._ca_path
         )
-        self._info = CatalogueProvider(charm=self)
 
         self.server_cert = CertHandler(
             self,
             key="catalogue-server-cert",
             sans=[socket.getfqdn()],
         )
-
-        desc = f"A service catalogue containing {len(self._info.items)} items."
 
         self._ingress = IngressPerAppRequirer(
             charm=self,
@@ -80,25 +76,12 @@ class CatalogueCharm(CharmBase):
             scheme=lambda: urlparse(self._internal_url).scheme,
         )
 
-        self._catalogue_consumer = CatalogueConsumer(
-            charm=self,
-            relation_name="catalogue-item",
-            item=CatalogueItem(
-                name=f"{self.model.config['title']}",
-                icon="book-open-blank-variant-outline",
-                url=self._ingress.url or "about:blank",
-                description=desc,
-            ),
-        )
-
         self.framework.observe(
             self.on.catalogue_pebble_ready,
             self._on_catalogue_pebble_ready,  # pyright: ignore
         )
-        self.framework.observe(
-            self._info.on.items_changed,
-            self._on_items_changed,  # pyright: ignore
-        )
+        self.framework.observe(self.on.catalogue_relation_changed, self._on_catalogue_relation_changed)
+        self.framework.observe(self.on.catalogue_relation_departed, self._on_catalogue_relation_departed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self._ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
@@ -111,6 +94,13 @@ class CatalogueCharm(CharmBase):
             self._on_server_cert_changed,
         )
         self.framework.observe(self.on.get_url_action, self._get_url)
+
+
+    def _update_own_item_in_anoother_catalogue(self) -> None:
+        relations = self.model.relations["catalogue-item"]
+        app = self.model.app
+        is_leader = self.unit.is_leader()
+        CatalogueConsumer.update_item(self._catalogue_item, relations, app, is_leader)
 
     def _get_url(self, event: ActionEvent):
         """Return the external hostname to be passed to ingress via the relation.
@@ -130,17 +120,26 @@ class CatalogueCharm(CharmBase):
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
         logger.info("This app's ingress URL: %s", event.url)
-        self._configure(self.items, push_certs=True)
+        self._configure(push_certs=True)
 
     def _on_ingress_revoked(self, _):
         logger.info("This app no longer has ingress")
-        self._configure(self.items, push_certs=True)
+        self._configure(push_certs=True)
 
     def _on_catalogue_pebble_ready(self, _):
         # We set push_certs to True here to cover the upgrade sequence. When upgrade-charm fires,
         # the container may not yet be ready, and the certs are written to non-persistent storage
         # (which is a good thing).
-        self._configure(self.items, push_certs=True)
+        self._configure(push_certs=True)
+
+    def _on_catalogue_relation_changed(self, _):
+        # We set push_certs to True here to cover the upgrade sequence. When upgrade-charm fires,
+        # the container may not yet be ready, and the certs are written to non-persistent storage
+        # (which is a good thing).
+        self._configure(push_certs=True)
+
+    def _on_catalogue_relation_departed(self, _):
+        self._configure()
 
     def _update_status(self, status):
         if self.unit.is_leader():
@@ -150,16 +149,13 @@ class CatalogueCharm(CharmBase):
     def _on_upgrade(self, _):
         # Ideally we would want to push certs on upgrade, but at this point we can't know for sure
         # if pebble-ready (can_connect guard).
-        self._configure(self.items)
+        self._configure()
 
     def _on_config_changed(self, _):
-        self._configure(self.items)
-
-    def _on_items_changed(self, event: CatalogueItemsChangedEvent):
-        self._configure(event.items)
+        self._configure()
 
     def _on_server_cert_changed(self, _):
-        self._configure(self.items, push_certs=True)
+        self._configure(push_certs=True)
 
         # When server cert changes we need to update the scheme we inform traefik.
         parsed = urlparse(self._internal_url)
@@ -184,7 +180,7 @@ class CatalogueCharm(CharmBase):
         if self.server_cert.private_key:
             self.workload.push(KEY_PATH, self.server_cert.private_key, make_dirs=True)
 
-    def _configure(self, items, push_certs: bool = False):
+    def _configure(self, push_certs: bool = False):
         if not self.workload.can_connect():
             self._update_status(WaitingStatus("Waiting for Pebble ready"))
             return
@@ -197,8 +193,9 @@ class CatalogueCharm(CharmBase):
                 logger.error(str(e))
                 return
 
+        self._update_own_item_in_anoother_catalogue()
         nginx_config_changed = self._update_web_server_config()
-        catalogue_config_changed = self._update_catalogue_config(items)
+        catalogue_config_changed = self._update_catalogue_config(self.items)
         pebble_layer_changed = self._update_pebble_layer()
         restart = any([nginx_config_changed, catalogue_config_changed, pebble_layer_changed])
 
@@ -291,9 +288,16 @@ class CatalogueCharm(CharmBase):
     @property
     def items(self):
         """Applications to display in the catalogue."""
-        if not self._info:
-            return []
-        return self._info.items
+        return CatalogueProvider.items(self.model.relations["catalogue"])
+
+    @property
+    def _catalogue_item(self) -> CatalogueItem:
+        return CatalogueItem(
+            name=f"{self.model.config['title']}",
+            icon="book-open-blank-variant-outline",
+            url=self._ingress.url or "about:blank",
+            description=f"A service catalogue containing {len(self.items)} items.",
+        )
 
     @property
     def workload(self):
