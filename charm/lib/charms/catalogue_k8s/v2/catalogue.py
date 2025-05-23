@@ -44,7 +44,7 @@ class CatalogueConsumer:
             relation.data[app]["url"] = item.url
             relation.data[app]["icon"] = item.icon
 
-class CatalogueProvider():
+class CatalogueProvider:
     """`CatalogueProvider` is the side of the relation that serves the actual service catalogue."""
 
     @staticmethod
