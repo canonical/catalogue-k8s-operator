@@ -193,7 +193,7 @@ class CatalogueCharm(CharmBase):
                 logger.error(str(e))
                 return
 
-        self._update_own_item_in_anoother_catalogue()
+        self._update_own_item_in_another_catalogue()
         nginx_config_changed = self._update_web_server_config()
         catalogue_config_changed = self._update_catalogue_config(self.items)
         pebble_layer_changed = self._update_pebble_layer()
