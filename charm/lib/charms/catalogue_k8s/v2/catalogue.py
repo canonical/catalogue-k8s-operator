@@ -5,9 +5,10 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import TYPE_CHECKING, Dict, List
 
-from ops.model import Application, Relation
+if TYPE_CHECKING:
+    from ops.model import Application, Relation
 
 LIBID = "fa28b361293b46668bcd1f209ada6983"
 LIBAPI = 2
@@ -33,7 +34,7 @@ class CatalogueConsumer:
     """`CatalogueConsumer` is used to send over a `CatalogueItem`."""
 
     @staticmethod
-    def update_item(item: CatalogueItem, relations: List[Relation] , app: Application, is_leader: bool = False):
+    def update_item(item: CatalogueItem, relations: List["Relation"] , app: "Application", is_leader: bool = False):
         """Update item on Catalogue."""
         if not is_leader:
             return
@@ -48,7 +49,7 @@ class CatalogueProvider:
     """`CatalogueProvider` is the side of the relation that serves the actual service catalogue."""
 
     @staticmethod
-    def items(relations: List[Relation]) -> List[Dict]:
+    def items(relations: List["Relation"]) -> List[Dict]:
         """List of apps sent over relation data."""
         return [
             {
