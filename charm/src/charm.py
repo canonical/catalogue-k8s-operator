@@ -96,7 +96,7 @@ class CatalogueCharm(CharmBase):
         self.framework.observe(self.on.get_url_action, self._get_url)
 
 
-    def _update_own_item_in_anoother_catalogue(self) -> None:
+    def _update_own_item_in_another_catalogue(self) -> None:
         relations = self.model.relations["catalogue-item"]
         app = self.model.app
         is_leader = self.unit.is_leader()
