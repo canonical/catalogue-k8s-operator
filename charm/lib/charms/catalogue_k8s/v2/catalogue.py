@@ -4,7 +4,7 @@
 """Charm for providing services catalogues to bundles or sets of charms."""
 
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Dict, List
 
 if TYPE_CHECKING:
@@ -40,10 +40,7 @@ class CatalogueConsumer:
             return
 
         for relation in relations:
-            relation.data[app]["name"] = item.name
-            relation.data[app]["description"] = item.description
-            relation.data[app]["url"] = item.url
-            relation.data[app]["icon"] = item.icon
+            relation.data[app].update(asdict(item))
 
 class CatalogueProvider:
     """`CatalogueProvider` is the side of the relation that serves the actual service catalogue."""
@@ -51,13 +48,4 @@ class CatalogueProvider:
     @staticmethod
     def items(relations: List["Relation"]) -> List[Dict]:
         """List of apps sent over relation data."""
-        return [
-            {
-                "name": relation.data[relation.app].get("name", ""),
-                "url": relation.data[relation.app].get("url", ""),
-                "icon": relation.data[relation.app].get("icon", ""),
-                "description": relation.data[relation.app].get("description", ""),
-            }
-            for relation in relations
-            if relation.app and relation.units
-        ]
+        return [dict(relation.data[relation.app]) for relation in relations if relation.app and relation.units]

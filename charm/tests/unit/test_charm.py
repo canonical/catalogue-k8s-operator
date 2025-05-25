@@ -63,6 +63,7 @@ class TestCharm(unittest.TestCase):
                 "name": "remote-charm",
                 "url": "https://localhost",
                 "icon": "some-cool-icon",
+                "description": "Description",
             },
         )
 
@@ -73,7 +74,7 @@ class TestCharm(unittest.TestCase):
                     "name": "remote-charm",
                     "url": "https://localhost",
                     "icon": "some-cool-icon",
-                    "description": "",
+                    "description": "Description",
                 }
             ],
             json.loads(data.read())["apps"],
