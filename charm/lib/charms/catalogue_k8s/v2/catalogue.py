@@ -30,8 +30,8 @@ class CatalogueItem:
     icon: str
     description: str = ""
 
-class CatalogueConsumer:
-    """`CatalogueConsumer` is used to send over a `CatalogueItem`."""
+class CatalogueRequirer:
+    """`CatalogueRequirer` is used to send over a `CatalogueItem`."""
 
     @staticmethod
     def update_item(item: CatalogueItem, relations: List["Relation"] , app: "Application", is_leader: bool = False):
