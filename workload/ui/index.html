@@ -6,10 +6,18 @@
   <meta name="description" content="COS Dashboard">
   <meta content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"
     name="viewport" />
-  <link rel="stylesheet" href="./assets/vanilla-framework-3.7.1.min.css" />
-  <link rel="stylesheet" href="./assets/ui.css" />
-  <script src="./assets/handlebars.min.js"></script>
-  <script src="./assets/iconify.min.js"></script>
+  <script>
+    // If there is no trailing slash at the end of the path in the url,
+    // add one. This ensures assets like ui.css are loaded properly
+    if (location.pathname.substr(-1) != '/') {
+        location.pathname = location.pathname + '/';
+        console.log('added slash');
+    }
+  </script>
+  <link rel="stylesheet" href="./vanilla-framework-3.7.1.min.css" />
+  <link rel="stylesheet" href="./ui.css" />
+  <script src="./handlebars.min.js"></script>
+  <script src="./iconify.min.js"></script>
 
 </head>
 <script type="text/handlebars-template" id="root-template">
@@ -53,7 +61,8 @@
         <ul class="p-matrix" id="apps">
           {{! --- Apps --- }}
           {{#each apps}}
-             <li class="p-matrix__item">
+              <li class="p-matrix__item">
+			  {{#if name}}
               <div class="p-matrix__img">
                 <span class="iconify icon md-48" data-icon="mdi-{{icon}}"></span>
               </div>
@@ -63,7 +72,8 @@
                 <p class="p-matrix__desc">{{description}}</p>
                 {{/if}}  
               </div>
-            </li>
+			  {{/if}}
+              </li>
             {{/each}}
         </ul>
         {{else}}
@@ -117,6 +127,6 @@
 </script>
 
 <body id="root"></body>
-<script src="./assets/ui.js" type="text/javascript"></script>
+<script src="./ui.js" type="text/javascript"></script>
 
 </html>
