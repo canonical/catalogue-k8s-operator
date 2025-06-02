@@ -72,7 +72,7 @@ async def test_app_integration(ops_test: OpsTest):
         ops_test.model.deploy(
             prometheus_app_name,
             application_name=prometheus_app_name,
-            channel="1.0/stable",
+            channel="1/stable",
             trust=True,
         ),
     )
