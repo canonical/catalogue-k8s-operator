@@ -20,11 +20,11 @@ from charms.catalogue_k8s.v1.catalogue import (
     CatalogueItemsChangedEvent,
     CatalogueProvider,
 )
+from charms.istio_beacon_k8s.v0.service_mesh import ServiceMeshConsumer
 from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
-from charms.istio_beacon_k8s.v0.service_mesh import ServiceMeshConsumer
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
