@@ -10,5 +10,3 @@ jobs:
     name: TiCs
     uses: canonical/observability/.github/workflows/charm-tiobe-scan.yaml@v1
     secrets: inherit
-    with:
-        charm-path: charm
