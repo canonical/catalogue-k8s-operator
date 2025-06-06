@@ -11,4 +11,4 @@ jobs:
     uses: canonical/observability/.github/workflows/charm-tiobe-scan.yaml@v1
     secrets: inherit
     with:
-        charm_path: charm
+        charm-path: charm
