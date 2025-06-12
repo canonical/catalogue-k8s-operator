@@ -20,6 +20,7 @@ from charms.catalogue_k8s.v1.catalogue import (
     CatalogueItemsChangedEvent,
     CatalogueProvider,
 )
+from charms.istio_beacon_k8s.v0.service_mesh import ServiceMeshConsumer
 from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
@@ -90,6 +91,8 @@ class CatalogueCharm(CharmBase):
                 description=desc,
             ),
         )
+
+        self._mesh = ServiceMeshConsumer(self)
 
         self.framework.observe(
             self.on.catalogue_pebble_ready,

@@ -12,7 +12,7 @@ dependencies = [
   "jsonschema",
   "cryptography",
   "opentelemetry-exporter-otlp-proto-http==1.21.0",
-  "pydantic<2",
+  "pydantic>=2",  # istio-beacon lib requirement
 ]
 
 [project.optional-dependencies]
@@ -23,7 +23,7 @@ dev = [
   # Static
   "pyright",
   "responses==0.20.0",
-  "httpcore==0.14.7",
+  "httpcore",
   # Unit
   "pytest",
   "coverage[toml]",
