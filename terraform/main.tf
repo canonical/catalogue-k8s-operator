@@ -1,15 +1,15 @@
 resource "juju_application" "catalogue" {
-  name               = var.app_name
-  config             = var.config
-  constraints        = var.constraints
+  name               = var.config_options.app_name
+  config             = var.config_options.config
+  constraints        = var.config_options.constraints
   model              = var.model
-  storage_directives = var.storage_directives
-  trust              = true
-  units              = var.units
+  storage_directives = var.config_options.storage_directives
+  trust              = var.config_options.trust
+  units              = var.config_options.units
 
   charm {
     name     = "catalogue-k8s"
-    channel  = var.channel
-    revision = var.revision
+    channel  = var.config_options.channel
+    revision = var.config_options.revision
   }
 }
