@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import Mock, patch
 from urllib.parse import urlparse
 
-from charms.catalogue_k8s.v1.catalogue import DEFAULT_RELATION_NAME
+from charms.catalogue_k8s.v2.catalogue import DEFAULT_RELATION_NAME
 from ops.charm import ActionEvent
 from ops.model import ActiveStatus
 from ops.testing import Harness
@@ -63,6 +63,7 @@ class TestCharm(unittest.TestCase):
                 "name": "remote-charm",
                 "url": "https://localhost",
                 "icon": "some-cool-icon",
+                "description": "Description",
             },
         )
 
@@ -73,7 +74,7 @@ class TestCharm(unittest.TestCase):
                     "name": "remote-charm",
                     "url": "https://localhost",
                     "icon": "some-cool-icon",
-                    "description": "",
+                    "description": "Description",
                 }
             ],
             json.loads(data.read())["apps"],
@@ -126,7 +127,7 @@ class TestCharm(unittest.TestCase):
         mock_logger.info.assert_called_with(
             "This app's ingress URL: %s", "https://testingress.com"
         )
-        mock_configure.assert_called_with({"name": "test_value"}, push_certs=True)
+        mock_configure.assert_called_with(push_certs=True)
 
         mock_logger.reset_mock()
         mock_configure.reset_mock()
@@ -136,7 +137,7 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_ingress_revoked(None)
 
         mock_logger.info.assert_called_with("This app no longer has ingress")
-        mock_configure.assert_called_with([], push_certs=True)
+        mock_configure.assert_called_with(push_certs=True)
 
     def test_get_url_action_no_ingress(self):
         action_event = Mock(spec=ActionEvent)
