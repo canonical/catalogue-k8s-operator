@@ -27,7 +27,7 @@ async def test_build_and_deploy(ops_test: OpsTest, catalogue_charm):
     resources = {"catalogue-image": METADATA["resources"]["catalogue-image"]["upstream-source"]}
     await ops_test.model.deploy(catalogue_charm, resources=resources, application_name="catalogue")
 
-    # issuing dummy update_status just to trigger an event
+    # issuing fake update_status just to trigger an event
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
             apps=["catalogue"],
