@@ -3,7 +3,6 @@
 # See LICENSE file for licensing details.
 
 
-import asyncio
 import json
 import logging
 from pathlib import Path
@@ -48,13 +47,11 @@ async def test_build_and_deploy(ops_test: OpsTest, catalogue_charm):
 
 async def test_tls(ops_test: OpsTest):
     assert ops_test.model
-    await asyncio.gather(
-        ops_test.model.deploy(
-            "self-signed-certificates",
-            application_name=ssc_app_name,
-            channel="latest/edge",
-            trust=True,
-        ),
+    await ops_test.model.deploy(
+        "self-signed-certificates",
+        application_name=ssc_app_name,
+        channel="1/edge",
+        trust=True,
     )
     await ops_test.model.add_relation(APP_NAME, ssc_app_name)
     await ops_test.model.wait_for_idle(apps=app_names, status="active")
@@ -68,13 +65,11 @@ async def test_tls(ops_test: OpsTest):
 async def test_app_integration(ops_test: OpsTest):
     assert ops_test.model
     assert ops_test.model_full_name
-    await asyncio.gather(
-        ops_test.model.deploy(
-            prometheus_app_name,
-            application_name=prometheus_app_name,
-            channel="1/stable",
-            trust=True,
-        ),
+    await ops_test.model.deploy(
+        prometheus_app_name,
+        application_name=prometheus_app_name,
+        channel="1/stable",
+        trust=True,
     )
 
     await ops_test.model.integrate(f"{APP_NAME}", prometheus_app_name)
