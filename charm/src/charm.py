@@ -10,8 +10,9 @@ import json
 import logging
 import socket
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Optional, cast
 from urllib.parse import urlparse
 
 from charms.catalogue_k8s.v1.catalogue import (
@@ -21,9 +22,12 @@ from charms.catalogue_k8s.v1.catalogue import (
     CatalogueProvider,
 )
 from charms.istio_beacon_k8s.v0.service_mesh import ServiceMeshConsumer
-from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
+from charms.tls_certificates_interface.v4.tls_certificates import (
+    CertificateRequestAttributes,
+    TLSCertificatesRequiresV4,
+)
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
@@ -37,13 +41,20 @@ logger = logging.getLogger(__name__)
 ROOT_PATH = "/web"
 CONFIG_PATH = ROOT_PATH + "/config.json"
 
+@dataclass
+class TLSConfig:
+    """TLS configuration received by the charm over the `certificates` relation."""
+
+    server_cert: str
+    ca_cert: str
+    private_key: str
 
 @trace_charm(
     tracing_endpoint="tracing_endpoint",
     server_cert="server_ca_cert_path",
     extra_types=(
         CatalogueProvider,
-        CertHandler,
+        TLSCertificatesRequiresV4,
         IngressPerAppRequirer,
     ),
 )
@@ -55,6 +66,7 @@ class CatalogueCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.name = "catalogue"  # container, layer, service
+        self._fqdn = socket.getfqdn()
 
         self.unit.set_ports(80)
 
@@ -65,10 +77,18 @@ class CatalogueCharm(CharmBase):
         )
         self._info = CatalogueProvider(charm=self)
 
-        self.server_cert = CertHandler(
-            self,
-            key="catalogue-server-cert",
-            sans=[socket.getfqdn()],
+
+        self._csr_attributes = CertificateRequestAttributes(
+            # the `common_name` field is required but limited to 64 characters.
+            # since it's overridden by sans, we can use a short,
+            # constrained value like app name.
+            common_name=self.app.name,
+            sans_dns=frozenset((self._fqdn,)),
+        )
+        self._cert_requirer = TLSCertificatesRequiresV4(
+            charm=self,
+            relationship_name="certificates",
+            certificate_requests=[self._csr_attributes],
         )
 
         desc = f"A service catalogue containing {len(self._info.items)} items."
@@ -110,7 +130,7 @@ class CatalogueCharm(CharmBase):
             self._on_ingress_revoked,  # pyright: ignore
         )
         self.framework.observe(
-            self.server_cert.on.cert_changed,  # pyright: ignore
+            self._cert_requirer.on.certificate_available,  # pyright: ignore
             self._on_server_cert_changed,
         )
         self.framework.observe(self.on.get_url_action, self._get_url)
@@ -170,22 +190,19 @@ class CatalogueCharm(CharmBase):
         self._ingress.provide_ingress_requirements(scheme=parsed.scheme, port=port)
 
     def _push_certs(self):
-        for path in [KEY_PATH, CERT_PATH, CA_CERT_PATH]:
-            self.workload.remove_path(path, recursive=True)
-
-        if self.server_cert.ca_cert:
-            self.workload.push(CA_CERT_PATH, self.server_cert.ca_cert, make_dirs=True)
+        ca_cert_path = Path(self._ca_path)
+        if tls_config := self._tls_config:
+            self.workload.push(CERT_PATH, tls_config.server_cert, make_dirs=True)
+            self.workload.push(KEY_PATH, tls_config.private_key, make_dirs=True)
+            self.workload.push(CA_CERT_PATH, tls_config.ca_cert, make_dirs=True)
             # write CA certificate to the charm container for charm tracing
-            ca_cert_path = Path(self._ca_path)
             ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
-            ca_cert_path.write_text(self.server_cert.ca_cert)
+            ca_cert_path.write_text(tls_config.ca_cert)
             subprocess.check_output(["update-ca-certificates", "--fresh"])
-
-        if self.server_cert.server_cert:
-            self.workload.push(CERT_PATH, self.server_cert.server_cert, make_dirs=True)
-
-        if self.server_cert.private_key:
-            self.workload.push(KEY_PATH, self.server_cert.private_key, make_dirs=True)
+        else:
+            for path in [KEY_PATH, CERT_PATH, CA_CERT_PATH]:
+                self.workload.remove_path(path, recursive=True)
+            ca_cert_path.unlink(missing_ok=True)
 
     def _configure(self, items, push_certs: bool = False):
         if not self.workload.can_connect():
@@ -241,7 +258,7 @@ class CatalogueCharm(CharmBase):
         return True
 
     def _update_web_server_config(self) -> bool:
-        config = NginxConfigBuilder(self._is_tls_ready()).build()
+        config = NginxConfigBuilder(self._tls_available).build()
 
         if self._running_nginx_config == config:
             return False
@@ -313,22 +330,12 @@ class CatalogueCharm(CharmBase):
             "links": json.loads(cast(str, self.model.config["links"])),
         }
 
-    def _is_tls_ready(self) -> bool:
-        """Return True if the workload is ready to operate in TLS mode."""
-        return (
-            self.workload.can_connect()
-            and self.server_cert.enabled
-            and self.workload.exists(CERT_PATH)
-            and self.workload.exists(KEY_PATH)
-            and self.workload.exists(CA_CERT_PATH)
-        )
-
     @property
     def _internal_url(self) -> str:
         """Return the fqdn dns-based in-cluster (private) address of the catalogue server."""
-        scheme = "https" if self._is_tls_ready() else "http"
+        scheme = "https" if self._tls_available else "http"
         port = 80 if scheme == "http" else 443
-        return f"{scheme}://{socket.getfqdn()}:{port}"
+        return f"{scheme}://{self._fqdn}:{port}"
 
     @property
     def _internal_port(self) -> int:
@@ -336,6 +343,18 @@ class CatalogueCharm(CharmBase):
         parsed_url = urlparse(self._internal_url)
         return int(parsed_url.port or 80)
 
+    @property
+    def _tls_config(self) -> Optional[TLSConfig]:
+        certificates, key = self._cert_requirer.get_assigned_certificate(
+            certificate_request=self._csr_attributes
+        )
+        if not (key and certificates):
+            return None
+        return TLSConfig(certificates.certificate.raw, certificates.ca.raw, key.raw)
+
+    @property
+    def _tls_available(self) -> bool:
+        return bool(self._tls_config)
 
 if __name__ == "__main__":
     main(CatalogueCharm)

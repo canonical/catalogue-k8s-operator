@@ -7,7 +7,7 @@ import json
 import os
 import socket
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 from urllib.parse import urlparse
 
 from charms.catalogue_k8s.v1.catalogue import DEFAULT_RELATION_NAME
@@ -84,13 +84,10 @@ class TestCharm(unittest.TestCase):
         _push_certs=lambda *_: None,
     )
     def test_server_cert(self):
-        patcher = patch.object(CatalogueCharm, "_is_tls_ready")
+        patcher = patch.object(CatalogueCharm, "_tls_available",  new_callable=PropertyMock)
         self.mock_tls_ready = patcher.start()
         self.addCleanup(patcher.stop)
         # Test with TLS
-        self.harness.charm.server_cert = Mock(
-            ca_cert="mock_ca", server_cert="mock_cert", private_key="mock_key"
-        )
 
         self.mock_tls_ready.return_value = True
         self.harness.charm._on_server_cert_changed(None)
@@ -102,7 +99,6 @@ class TestCharm(unittest.TestCase):
 
         # Test with HTTP
         self.mock_tls_ready.return_value = False
-        self.harness.charm.server_cert = Mock()
         self.harness.charm._on_server_cert_changed(None)
 
         internal_url = urlparse(self.harness.charm._internal_url)
