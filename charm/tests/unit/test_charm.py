@@ -90,7 +90,7 @@ class TestCharm(unittest.TestCase):
         # Test with TLS
 
         self.mock_tls_ready.return_value = True
-        self.harness.charm._on_server_cert_changed(None)
+        self.harness.charm._on_certificate_available(None)
         internal_url = urlparse(self.harness.charm._internal_url)
 
         self.assertEqual(internal_url.scheme, "https")
@@ -99,7 +99,7 @@ class TestCharm(unittest.TestCase):
 
         # Test with HTTP
         self.mock_tls_ready.return_value = False
-        self.harness.charm._on_server_cert_changed(None)
+        self.harness.charm._on_certificate_available(None)
 
         internal_url = urlparse(self.harness.charm._internal_url)
         self.assertEqual(internal_url.scheme, "http")
