@@ -131,7 +131,7 @@ class CatalogueCharm(CharmBase):
         )
         self.framework.observe(
             self._cert_requirer.on.certificate_available,  # pyright: ignore
-            self._on_server_cert_changed,
+            self._on_certificate_available,
         )
         self.framework.observe(self.on.get_url_action, self._get_url)
 
@@ -181,7 +181,7 @@ class CatalogueCharm(CharmBase):
     def _on_items_changed(self, event: CatalogueItemsChangedEvent):
         self._configure(event.items)
 
-    def _on_server_cert_changed(self, _):
+    def _on_certificate_available(self, _):
         self._configure(self.items, push_certs=True)
 
         # When server cert changes we need to update the scheme we inform traefik.
