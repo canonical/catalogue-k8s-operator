@@ -74,6 +74,8 @@ class TestCharm(unittest.TestCase):
                     "url": "https://localhost",
                     "icon": "some-cool-icon",
                     "description": "",
+                    "api_docs": "",
+                    "api_endpoints": {}
                 }
             ],
             json.loads(data.read())["apps"],
