@@ -54,10 +54,9 @@ To implement this in your charm:
 """
 
 import ipaddress
-import logging
-import socket
-from typing import Optional, Dict
 import json
+import logging
+from typing import Dict, Optional
 
 from ops.charm import CharmBase
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
@@ -211,7 +210,7 @@ class CatalogueProvider(Object):
                 "url": relation.data[relation.app].get("url", ""),
                 "icon": relation.data[relation.app].get("icon", ""),
                 "description": relation.data[relation.app].get("description", ""),
-                "api_docs": relation.data[relation.app].get("api_docs", ""), 
+                "api_docs": relation.data[relation.app].get("api_docs", ""),
                 "api_endpoints": json.loads(relation.data[relation.app].get("api_endpoints", "{}")),
             }
             for relation in self._charm.model.relations[self._relation_name]
