@@ -56,7 +56,8 @@ To implement this in your charm:
 import ipaddress
 import logging
 import socket
-from typing import Optional
+from typing import Optional, Dict
+import json
 
 from ops.charm import CharmBase
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
@@ -76,11 +77,15 @@ class CatalogueItem:
     The icon is an iconify mdi string; see https://icon-sets.iconify.design/mdi.
     """
 
-    def __init__(self, name: str, url: str, icon: str, description: str = ""):
+    def __init__(self, name: str, url: str, icon: str, description: str = "", api_docs: str = "", api_endpoints: Optional[Dict[str,str]] = None):
         self.name = name
         self.url = url
         self.icon = icon
         self.description = description
+        # The api is a dict: key: description/name of the endpoint, value is actual address of endpoint
+        # {"docs": "https://prometheus.io/docs/prometheus/latest/querying/api/", "endpoints":{'metadata':'/api/v1/targets/metadata'}}
+        self.api_docs = api_docs
+        self.api_endpoints = api_endpoints
 
 
 class CatalogueConsumer(Object):
@@ -119,6 +124,8 @@ class CatalogueConsumer(Object):
             relation.data[self._charm.model.app]["description"] = self._item.description
             relation.data[self._charm.model.app]["url"] = self.unit_address(relation)
             relation.data[self._charm.model.app]["icon"] = self._item.icon
+            relation.data[self._charm.model.app]["api_docs"] = self._item.api_docs
+            relation.data[self._charm.model.app]["api_endpoints"] = json.dumps(self._item.api_endpoints)
 
     def update_item(self, item: CatalogueItem):
         """Update the catalogue item."""
@@ -132,12 +139,7 @@ class CatalogueConsumer(Object):
         """
         if self._item and self._item.url:
             return self._item.url
-
-        unit_ip = str(self._charm.model.get_binding(relation).network.bind_address)
-        if self._is_valid_unit_address(unit_ip):
-            return unit_ip
-
-        return socket.getfqdn()
+        return ""
 
     def _is_valid_unit_address(self, address: str) -> bool:
         """Validate a unit address.
@@ -209,6 +211,8 @@ class CatalogueProvider(Object):
                 "url": relation.data[relation.app].get("url", ""),
                 "icon": relation.data[relation.app].get("icon", ""),
                 "description": relation.data[relation.app].get("description", ""),
+                "api_docs": relation.data[relation.app].get("api_docs", ""), 
+                "api_endpoints": json.loads(relation.data[relation.app].get("api_endpoints", "{}")),
             }
             for relation in self._charm.model.relations[self._relation_name]
             if relation.app and relation.units
