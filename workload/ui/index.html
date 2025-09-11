@@ -74,9 +74,15 @@
                    {{/if}}
                    {{#if api_docs}}
                             <h2 class="p-matrix__title"><a class="p-matrix__link" href="{{api_docs}}">API</a></h2>
-                    {{else}}
-                           <h2 class="p-matrix__title">API</h2>
                    {{/if}}
+                   {{#if api_endpoints}}
+                   {{#if api_endpoints}}
+                      <ul>
+                          {{#each api_endpoints}}
+                              <li>{{@key}}: {{this}}</li>
+                          {{/each}}
+                      </ul>
+                  {{/if}}
                    {{#if description}}
                    <p class="p-matrix__desc">{{description}}</p>
                    {{/if}}
