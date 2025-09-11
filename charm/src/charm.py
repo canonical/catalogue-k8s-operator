@@ -217,6 +217,9 @@ class CatalogueCharm(CharmBase):
                 logger.error(str(e))
                 return
 
+        if base_hostname := self.config.get("base_hostname"):
+            # TODO: replace url hostname with base_hostname for all urls
+
         nginx_config_changed = self._update_web_server_config()
         catalogue_config_changed = self._update_catalogue_config(items)
         pebble_layer_changed = self._update_pebble_layer()

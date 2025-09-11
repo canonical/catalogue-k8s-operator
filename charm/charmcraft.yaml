@@ -134,6 +134,11 @@ config:
           }
         ]
 
+    base_hostname:
+      description: |
+        Replaces the base hostname for all Catalogue items coming from relation data.
+      type: string
+
 actions:
   get-url:
     description: |
