@@ -79,6 +79,36 @@ class TestCharm(unittest.TestCase):
             json.loads(data.read())["apps"],
         )
 
+    def test_override_hostname(self):
+        # Given the catalogue and a remote charm
+
+        rel_id = self.harness.add_relation(DEFAULT_RELATION_NAME, "rc")
+
+        # AND the override_hostname config option is set
+        override_hostname = "foo_bar"
+        self.harness.update_config({'override_hostname': override_hostname})
+
+        # When a remote relation is added
+        self.harness.add_relation_unit(rel_id, "rc/0")
+        self.harness.update_relation_data(
+            rel_id,
+            "rc",
+            {
+                "name": "remote-charm",
+                "url": "https://localhost/remote_charm",
+                "icon": "some-cool-icon",
+            },
+        )
+
+        data = self._container.pull("/web/config.json")
+
+        # THEN the base hostname of the URL for that app in config.json should show the override hostname
+        self.assertEqual(
+            f"https://{override_hostname}/remote_charm",
+            json.loads(data.read())["apps"][0]["url"],
+        )
+
+
     @patch.multiple(
         "charm.CatalogueCharm",
         _push_certs=lambda *_: None,

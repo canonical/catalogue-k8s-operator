@@ -217,8 +217,8 @@ class CatalogueCharm(CharmBase):
                 logger.error(str(e))
                 return
 
-        if base_hostname := self.config.get("base_hostname"):
-            # TODO: replace url hostname with base_hostname for all urls
+        if base_hostname := self.config.get("override_hostname"):
+            self._override_hostname(items, base_hostname)
 
         nginx_config_changed = self._update_web_server_config()
         catalogue_config_changed = self._update_catalogue_config(items)
@@ -269,6 +269,34 @@ class CatalogueCharm(CharmBase):
         self.workload.push(NGINX_CONFIG_PATH, config, make_dirs=True)
         logger.info("Configuring NGINX web server.")
         return True
+
+    def _override_hostname(self, items, base_hostname) -> None:
+        logger.info("Original items: %s", items)
+
+        for item in items:
+            url = item.get("url", "")
+            if not url:
+                continue
+
+            # We want to keep the protocol as it was
+            # Even if the base hostname is over TLS, redirects will happen (from 80 - 443) and the item should be accessible from catalogue
+            if url.startswith("http://"):
+                protocol = "http://"
+                rest = url[len("http://"):]
+            elif url.startswith("https://"):
+                protocol = "https://"
+                rest = url[len("https://"):]
+            else:
+                continue  # Skip URLs without supported protocols
+
+            # Extract path (e.g. my_model-catalogue where path=<model-name>-<app-name>) after first slash
+            slash_index = rest.find("/")
+            path_only = rest[slash_index:] if slash_index != -1 else ""
+
+            # Rebuild the URL
+            item["url"] = f"{protocol}{base_hostname}{path_only}"
+
+        logger.info("Updated items: %s", items)
 
     @property
     def _running_nginx_config(self) -> str:
