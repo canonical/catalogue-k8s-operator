@@ -271,8 +271,6 @@ class CatalogueCharm(CharmBase):
         return True
 
     def _override_hostname(self, items, base_hostname) -> None:
-        logger.info("Original items: %s", items)
-
         for item in items:
             url = item.get("url", "")
             if not url:
@@ -287,16 +285,13 @@ class CatalogueCharm(CharmBase):
                 protocol = "https://"
                 rest = url[len("https://"):]
             else:
-                continue  # Skip URLs without supported protocols
+                continue
 
             # Extract path (e.g. my_model-catalogue where path=<model-name>-<app-name>) after first slash
             slash_index = rest.find("/")
             path_only = rest[slash_index:] if slash_index != -1 else ""
 
-            # Rebuild the URL
             item["url"] = f"{protocol}{base_hostname}{path_only}"
-
-        logger.info("Updated items: %s", items)
 
     @property
     def _running_nginx_config(self) -> str:
