@@ -13,7 +13,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, cast
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 from charms.catalogue_k8s.v1.catalogue import (
     CatalogueConsumer,
@@ -217,8 +217,11 @@ class CatalogueCharm(CharmBase):
                 logger.error(str(e))
                 return
 
-        if base_hostname := self.config.get("override_hostname"):
-            self._override_hostname(items, base_hostname)
+        if override_hostname := self.config.get("override_hostname"):
+            items = [
+                {**item, "url": self._override_hostname(item["url"], str(override_hostname))}
+                for item in items
+            ]
 
         nginx_config_changed = self._update_web_server_config()
         catalogue_config_changed = self._update_catalogue_config(items)
@@ -270,28 +273,11 @@ class CatalogueCharm(CharmBase):
         logger.info("Configuring NGINX web server.")
         return True
 
-    def _override_hostname(self, items, base_hostname) -> None:
-        for item in items:
-            url = item.get("url", "")
-            if not url:
-                continue
-
-            # We want to keep the protocol as it was
-            # Even if the base hostname is over TLS, redirects will happen (from 80 - 443) and the item should be accessible from catalogue
-            if url.startswith("http://"):
-                protocol = "http://"
-                rest = url[len("http://"):]
-            elif url.startswith("https://"):
-                protocol = "https://"
-                rest = url[len("https://"):]
-            else:
-                continue
-
-            # Extract path (e.g. my_model-catalogue where path=<model-name>-<app-name>) after first slash
-            slash_index = rest.find("/")
-            path_only = rest[slash_index:] if slash_index != -1 else ""
-
-            item["url"] = f"{protocol}{base_hostname}{path_only}"
+    def _override_hostname(self, url: str, override_hostname: str) -> str:
+        """Change the base hostname to one set in the config options."""
+        parsed_url = urlparse(url)
+        modified_url = parsed_url._replace(netloc=override_hostname)
+        return urlunparse(modified_url)
 
     @property
     def _running_nginx_config(self) -> str:
