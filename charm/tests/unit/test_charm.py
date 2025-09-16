@@ -86,7 +86,7 @@ class TestCharm(unittest.TestCase):
         # When a relation is established
         # AND the remote charm exposes an application entry
         # AND the remote charm writes values for api_docs and api_endpoints to the databag
-        # And the catalogue should write the entry to its config
+        # THEN Catalogue should write the entry to its config
         # AND the correct entries should show up for api_docs and api_endpoints in the config.json file
         apidocs = "some_url_to_upstream_docs"
         apiendpoint = {"endpoint_1":"some_endpoint_1", "endpoint_2":"some_endpoint_2"}
