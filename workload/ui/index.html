@@ -8,8 +8,6 @@
       name="viewport"
     />
     <script>
-      // If there is no trailing slash at the end of the path in the url,
-      // add one. This ensures assets like ui.css are loaded properly
       if (location.pathname.substr(-1) != "/") {
         location.pathname = location.pathname + "/";
         console.log("added slash");
@@ -22,124 +20,154 @@
   </head>
   <script type="text/handlebars-template" id="root-template">
     <header id="navigation" class="p-navigation is-dark">
-       <div class="p-navigation__row">
-         <div class="p-navigation__banner">
-           <div class="p-navigation__tagged-logo">
-             <a class="p-navigation__link" href="#">
-               <div class="p-navigation__logo-tag">
-                 <img class="p-navigation__logo-icon" src="https://assets.ubuntu.com/v1/82818827-CoF_white.svg" alt="">
-               </div>
-               <span class="p-navigation__logo-title" id="nav">
-                   {{title}}
-               </span>
-             </a>
-           </div>
-         </div>
-       </div>
-     </header>
-     <div class="p-strip--suru">
-       <div class="row">
-         <div class="col-12">
-           {{#if tagline}}
-             <h1>{{tagline}}</h1>
-           {{/if}}
-           {{#if description}}
-             <p>{{description}}</p>
-           {{/if}}
-         </div>
-       </div>
-     </div>
-     <div class="p-strip">
-       <div class="row">
-         <div class="col12">
-           <h3>Applications</h3>
-         </div>
-       </div>
-       <div class="row">
-         <div class="col-12">
-           {{#if apps}}
-           <ul class="p-matrix" id="apps">
-             {{! --- Apps --- }}
-             {{#each apps}}
-                 <li class="p-matrix__item">
-    		  {{#if name}}
-                 <div class="p-matrix__img">
-                   <span class="iconify icon md-48" data-icon="mdi-{{icon}}"></span>
-                 </div>
-                 <div class="p-matrix__content">
-                   {{#if url}}
-                           <h3 class="p-matrix__title"><a class="p-matrix__link" href="{{url}}">{{name}}</a></h3>
-                   {{else}}
-                           <h3 class="p-matrix__title">{{name}}</h3>
-                   {{/if}}
-                   {{#if api_docs}}
-                            <h2 class="p-matrix__title"><a class="p-matrix__link" href="{{api_docs}}">API</a></h2>
-                   {{/if}}
-                   {{#if api_endpoints}}
-                      <ul>
-                          {{#each api_endpoints}}
-                              <li>{{@key}}: {{this}}</li>
-                          {{/each}}
+      <div class="p-navigation__row">
+        <div class="p-navigation__banner">
+          <div class="p-navigation__tagged-logo">
+            <a class="p-navigation__link" href="#">
+              <div class="p-navigation__logo-tag">
+                <img class="p-navigation__logo-icon" src="https://assets.ubuntu.com/v1/82818827-CoF_white.svg" alt="">
+              </div>
+              <span class="p-navigation__logo-title" id="nav">
+                {{title}}
+              </span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="p-strip--suru">
+      <div class="row">
+        <div class="col-12">
+          {{#if tagline}}
+            <h1>{{tagline}}</h1>
+          {{/if}}
+          {{#if description}}
+            <p>{{description}}</p>
+          {{/if}}
+        </div>
+      </div>
+    </div>
+
+    <div class="p-strip">
+      <div class="row">
+        <div class="col12">
+          <h3>Applications</h3>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-12">
+          {{#if apps}}
+            <ul class="p-matrix" id="apps">
+              {{#each apps}}
+                <li class="p-matrix__item">
+                  <div class="p-matrix__img">
+                    <span class="iconify icon md-48" data-icon="mdi-{{icon}}"></span>
+                  </div>
+                  <div class="p-matrix__content">
+                    <h3 class="p-matrix__title">{{name}}</h3>
+                    <div class="" style="display: flex; gap: 0;">
+                      <button class="p-tooltip--btm-center" id="ui-button" {{#unless url}}disabled{{/unless}}>
+                        {{#if url}}
+                          <a href="{{url}}" class="p-matrix__link" target="_blank" rel="noopener noreferrer">
+                            <span class="iconify" data-icon="mdi-web"></span>
+                            <span class="p-tooltip__message" role="tooltip" id="default-tooltip">Visit UI</span>
+                          </a>
+                        {{else}}
+                          <span class="iconify" data-icon="mdi-web"></span>
+                          <span class="p-tooltip__message" role="tooltip" id="default-tooltip">Visit UI</span>
+                        {{/if}}
+                      </button>
+
+                      {{#with this}}
+                        <button class="p-tooltip--btm-center" aria-controls="modal-{{@index}}" {{#unless (hasKeys api_endpoints)}}disabled{{/unless}}>
+                          <span class="iconify" data-icon="mdi-api"></span>
+                          <span class="p-tooltip__message" role="tooltip">View endpoints</span>
+                        </button>
+
+                        {{#getKeys api_endpoints}}
+                          <div class="p-modal" id="modal-{{@index}}" style="display: none;">
+                            <section class="p-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="modal-title-{{@index}}" aria-describedby="modal-description-{{@index}}">
+                              <header class="p-modal__header">
+                                <h2 class="p-modal__title" id="modal-title-{{@index}}">API Endpoints for {{name}}</h2>
+                                <button class="p-modal__close" aria-label="Close active modal" aria-controls="modal-{{@index}}">Close</button>
+                              </header>
+                              <div class="p-modal__content">
+                                <p id="modal-description-{{@index}}">
+                                  {{#each api_endpoints}}
+                                    <strong>{{@key}}</strong>: {{this}}
+                                  {{/each}}
+                                </p>
+                              </div>
+                            </section>
+                          </div>
+                        {{/getKeys}}
+                      {{/with}}
+
+                      <button class="p-tooltip--btm-center" id="docs-button" {{#unless api_docs}}disabled{{/unless}}>
+                        <a href="{{api_docs}}" class="p-matrix__link" target="_blank">
+                          <span class="iconify" data-icon="mdi-file-document"></span>
+                          <span class="p-tooltip__message" role="tooltip" id="default-tooltip">Read docs</span>
+                        </a>
+                      </button>
+                    </div>
+                    {{#if description}}
+                      <p class="p-matrix__desc">{{description}}</p>
+                    {{/if}}
+                  </div>
+                </li>
+              {{/each}}
+            </ul>
+          {{else}}
+            <div class="p-notification--caution">
+              <div class="p-notification__content">
+                <h5 class="p-notification__title">No items to display</h5>
+                <p class="p-notification__message">No applications available for display yet. Add some by relating compatible charms to this one.</p>
+              </div>
+            </div>
+            <span></span>
+          {{/if}}
+        </div>
+      </div>
+
+      {{#if links}}
+        <div class="row">
+          <div class="col12">
+            <h3>Links</h3>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-12">
+            <ul class="p-matrix" id="links">
+              {{#each links}}
+                <li class="p-matrix__item">
+                  {{#if category}}
+                    <div class="p-matrix__img">
+                      <span class="iconify icon md-48" data-icon="mdi-bookmark"></span>
+                    </div>
+                    <div class="p-matrix__content">
+                      <h3 class="p-matrix__title">{{category}}</h3>
+                      <ul class="link-list">
+                        {{#each items}}
+                          <li>
+                            <a href="{{url}}" {{#if target}}target="{{target}}"{{/if}}>
+                              {{name}}
+                            </a>
+                          </li>
+                        {{/each}}
                       </ul>
+                    </div>
                   {{/if}}
-                   {{#if description}}
-                   <p class="p-matrix__desc">{{description}}</p>
-                   {{/if}}
-                 </div>
-    		  {{/if}}
-                 </li>
-               {{/each}}
-           </ul>
-           {{else}}
-           <div class="p-notification--caution">
-             <div class="p-notification__content">
-               <h5 class="p-notification__title">No items to display</h5>
-               <p class="p-notification__message">No applications available for display yet. Add some by relating compatible charms to this one.</p>
-             </div>
-           </div>
-           <span>
-
-           </span>
-           {{/if}}
-         </div>
-       </div>
-       {{#if links}}
-       <div class="row">
-         <div class="col12">
-           <h3>Links</h3>
-         </div>
-       </div>
-       <div class="row">
-         <div class="col-12">
-           <ul class="p-matrix" id="links">
-             {{! --- Links --- }}
-             {{#each links}}
-             <li class="p-matrix__item">
-               {{#if category}}
-               <div class="p-matrix__img">
-                 <span class="iconify icon md-48" data-icon="mdi-bookmark"></span>
-               </div>
-               <div class="p-matrix__content">
-                 <h3 class="p-matrix__title">{{category}}</h3>
-                 <ul class="link-list">
-                   {{#each items}}
-                   <li>
-                     <a href="{{url}}" {{#if target}}target="{{target}}"{{/if}}>
-                       {{name}}
-                     </a>
-                   </li>
-                   {{/each}}
-                 </ul>
-               </div>
-               {{/if}}
-             </li>
-             {{/each}}
-         </div>
-       </div>
-       {{/if}}
-     </div>
+                </li>
+              {{/each}}
+            </ul>
+          </div>
+        </div>
+      {{/if}}
+    </div>
   </script>
-
   <body id="root"></body>
   <script src="./ui.js" type="text/javascript"></script>
+  <script src="./modal.js" type="text/javascript"></script>
+  <script></script>
 </html>
