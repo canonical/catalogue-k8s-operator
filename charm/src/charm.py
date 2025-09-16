@@ -218,10 +218,8 @@ class CatalogueCharm(CharmBase):
                 return
 
         if override_hostname := self.config.get("override_hostname"):
-            items = [
-                {**item, "url": self._override_hostname(item["url"], str(override_hostname))}
-                for item in items
-            ]
+            for item in items:
+                item["url"] = self._override_hostname(item["url"], str(override_hostname))
 
         nginx_config_changed = self._update_web_server_config()
         catalogue_config_changed = self._update_catalogue_config(items)
