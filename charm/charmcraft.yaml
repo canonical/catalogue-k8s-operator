@@ -51,32 +51,32 @@ provides:
       This relation provides additional data required by the service mesh to enforce cross-model authorization policies.
 
 requires:
-    catalogue-item:
-        interface: catalogue
-        description: |
-          Add this catalogue to the index of another catalogue instance.
-    ingress:
-        interface: ingress
-        limit: 1
-    certificates:
-        interface: tls-certificates
-        limit: 1
-        description: |
-          Certificate and key files for the Catalogue web.
-    tracing:
-        interface: tracing
-        limit: 1
-    service-mesh:
-        limit: 1
-        interface: service_mesh
-        description: |
-          Subscribe this charm into a service mesh to enforce authorization policies.
-    require-cmr-mesh:
-        interface: cross_model_mesh
-        description: |
-          Allow a cross-model application access to catalogue via the service mesh.
-          This relation provides additional data required by the service mesh to enforce cross-model authorization policies.
-  
+  catalogue-item:
+    interface: catalogue
+    description: |
+      Add this catalogue to the index of another catalogue instance.
+  ingress:
+    interface: ingress
+    limit: 1
+  certificates:
+    interface: tls-certificates
+    limit: 1
+    description: |
+      Certificate and key files for the Catalogue web.
+  tracing:
+    interface: tracing
+    limit: 1
+  service-mesh:
+    limit: 1
+    interface: service_mesh
+    description: |
+      Subscribe this charm into a service mesh to enforce authorization policies.
+  require-cmr-mesh:
+    interface: cross_model_mesh
+    description: |
+      Allow a cross-model application access to catalogue via the service mesh.
+      This relation provides additional data required by the service mesh to enforce cross-model authorization policies.
+
 peers:
   replicas:
     interface: catalogue_replica
@@ -100,7 +100,7 @@ config:
       description: |
         A somewhat longer description of the bundle or set of charms the
         catalogue is displaying.
-    
+
     links:
       type: string
       description: |
@@ -133,6 +133,12 @@ config:
             ]
           }
         ]
+
+    override_hostname:
+      description: |
+        Replaces the base hostname for all Catalogue items coming from relation data. This config option only works when using
+        path routing e.g. <host_name>/<model_name>-<app_name> and not when using subdomain routing e.g. <app>.<model>.<hostname>
+      type: string
 
 actions:
   get-url:
