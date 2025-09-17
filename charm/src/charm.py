@@ -13,7 +13,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, cast
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 from charms.catalogue_k8s.v1.catalogue import (
     CatalogueConsumer,
@@ -217,6 +217,10 @@ class CatalogueCharm(CharmBase):
                 logger.error(str(e))
                 return
 
+        if override_hostname := self.config.get("override_hostname"):
+            for item in items:
+                item["url"] = self._override_hostname(item["url"], str(override_hostname))
+
         nginx_config_changed = self._update_web_server_config()
         catalogue_config_changed = self._update_catalogue_config(items)
         pebble_layer_changed = self._update_pebble_layer()
@@ -266,6 +270,12 @@ class CatalogueCharm(CharmBase):
         self.workload.push(NGINX_CONFIG_PATH, config, make_dirs=True)
         logger.info("Configuring NGINX web server.")
         return True
+
+    def _override_hostname(self, url: str, override_hostname: str) -> str:
+        """Change the base hostname to one set in the config options."""
+        parsed_url = urlparse(url)
+        modified_url = parsed_url._replace(netloc=override_hostname)
+        return urlunparse(modified_url)
 
     @property
     def _running_nginx_config(self) -> str:
