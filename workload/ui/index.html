@@ -86,11 +86,9 @@
                                 <button class="p-modal__close" aria-label="Close active modal" aria-controls="modal-{{@index}}">Close</button>
                               </header>
                               <div class="p-modal__content">
-                                <p id="modal-description-{{@index}}">
-                                  {{#each api_endpoints}}
-                                    <strong>{{@key}}</strong>: {{this}}
-                                  {{/each}}
-                                </p>
+                                {{#each api_endpoints}}
+                                  <p><strong>{{@key}}</strong>: <span>{{this}}</span></p>
+                                {{/each}}
                               </div>
                             </section>
                           </div>
