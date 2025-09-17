@@ -73,7 +73,14 @@ logger = logging.getLogger(__name__)
 class CatalogueItem:
     """`CatalogueItem` represents an application entry sent to a catalogue.
 
-    The icon is an iconify mdi string; see https://icon-sets.iconify.design/mdi.
+    icon (str): An Iconify Material Design Icon (MDI) string. 
+        (See: https://icon-sets.iconify.design/mdi for more details).
+    api_docs (str): A URL to the docs relevant to this item (upstream or otherwise).
+    api_endpoints (dict): A dictionary containing API information, where:
+        - The key is a description or name of the endpoint (e.g., "Alerts").
+        - The value is the actual address of the endpoint (e.g., "'http://1.2.3.4:1234/api/v1/targets/metadata'").
+        - Example for setting the api_endpoints attr:
+            api_endpoints={"Alerts": f"{self.external_url}/api/v1/alerts"}
     """
 
     def __init__(self, name: str, url: str, icon: str, description: str = "", api_docs: str = "", api_endpoints: Optional[Dict[str,str]] = None):
@@ -81,8 +88,6 @@ class CatalogueItem:
         self.url = url
         self.icon = icon
         self.description = description
-        # The api is a dict: key: description/name of the endpoint, value is actual address of endpoint
-        # {"docs": "https://prometheus.io/docs/prometheus/latest/querying/api/", "endpoints":{'metadata':'/api/v1/targets/metadata'}}
         self.api_docs = api_docs
         self.api_endpoints = api_endpoints
 
