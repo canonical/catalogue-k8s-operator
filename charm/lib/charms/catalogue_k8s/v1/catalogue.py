@@ -73,7 +73,7 @@ logger = logging.getLogger(__name__)
 class CatalogueItem:
     """`CatalogueItem` represents an application entry sent to a catalogue.
 
-    icon (str): An Iconify Material Design Icon (MDI) string. 
+    icon (str): An Iconify Material Design Icon (MDI) string.
         (See: https://icon-sets.iconify.design/mdi for more details).
     api_docs (str): A URL to the docs relevant to this item (upstream or otherwise).
     api_endpoints (dict): A dictionary containing API information, where:
