@@ -1,8 +1,8 @@
-name: catalogue 
+name: catalogue
 summary: A service catalogue for workloads running in Juju.
 description: A service catalogue for workloads running in Juju.
 version: "0.15.0"
-base: ubuntu:22.04
+base: ubuntu@22.04
 license: Apache-2.0
 
 platforms:
@@ -10,7 +10,7 @@ platforms:
 
 parts:
   catalogue:
-    plugin: nil 
+    plugin: nil
     source: .
     stage-packages:
       - nginx
