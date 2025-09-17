@@ -77,7 +77,17 @@
       toggleModal(modal, false, false);
     });
   }
+  function handleOpenLinkButtons() {
+    document.addEventListener("click", function (event) {
+      var button = event.target.closest(".openLinkBtn");
+      if (!button) return;
+      var url = button.getAttribute("data-link");
 
+      if (url) {
+        window.open(url, "_blank");
+      }
+    });
+  }
   document.addEventListener("click", function (event) {
     var targetControls = event.target.getAttribute("aria-controls");
     if (targetControls) {
@@ -101,4 +111,5 @@
   Handlebars.registerHelper("hasKeys", function (obj) {
     return Object.keys(obj || {}).length > 0;
   });
+  handleOpenLinkButtons();
 })();
