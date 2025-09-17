@@ -119,6 +119,7 @@ class TestCharm(unittest.TestCase):
             json.loads(data.read())["apps"],
         )
 
+
     @patch.multiple(
         "charm.CatalogueCharm",
         _push_certs=lambda *_: None,
