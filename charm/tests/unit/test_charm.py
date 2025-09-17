@@ -74,6 +74,46 @@ class TestCharm(unittest.TestCase):
                     "url": "https://localhost",
                     "icon": "some-cool-icon",
                     "description": "",
+                    "api_docs": "",
+                    "api_endpoints": {}
+                }
+            ],
+            json.loads(data.read())["apps"],
+        )
+
+    def test_api_type(self):
+        # Given the catalogue and a remote charm
+        # When a relation is established
+        # AND the remote charm exposes an application entry
+        # AND the remote charm writes values for api_docs and api_endpoints to the databag
+        # THEN Catalogue should write the entry to its config
+        # AND the correct entries should show up for api_docs and api_endpoints in the config.json file
+        apidocs = "some_url_to_upstream_docs"
+        apiendpoint = {"endpoint_1":"some_endpoint_1", "endpoint_2":"some_endpoint_2"}
+        rel_id = self.harness.add_relation(DEFAULT_RELATION_NAME, "rc")
+        self.harness.add_relation_unit(rel_id, "rc/0")
+        self.harness.update_relation_data(
+            rel_id,
+            "rc",
+            {
+                "name": "remote-charm",
+                "url": "https://localhost",
+                "icon": "some-cool-icon",
+                "api_docs":apidocs,
+                "api_endpoints":json.dumps(apiendpoint),
+            },
+        )
+
+        data = self._container.pull("/web/config.json")
+        self.assertEqual(
+            [
+                {
+                    "name": "remote-charm",
+                    "url": "https://localhost",
+                    "icon": "some-cool-icon",
+                    "description": "",
+                    "api_docs": apidocs,
+                    "api_endpoints": apiendpoint
                 }
             ],
             json.loads(data.read())["apps"],

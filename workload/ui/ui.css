@@ -1,17 +1,21 @@
 .md-48 {
-    font-size: 36px;
-    color: #888;
-    border: 1px solid #d9d9d9;
-    padding: 8px;
-    border-radius: 100%;
+  font-size: 36px;
+  color: #888;
+  border: 1px solid #d9d9d9;
+  padding: 8px;
+  border-radius: 100%;
 }
 
 .p-matrix__item {
-    border: 0;
+  border: 0;
 }
 
 .link-list {
-    list-style-type: none;
-    margin: 0;
-    padding: 0;
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+}
+
+.custom-icon {
+  color: #008494;
 }
