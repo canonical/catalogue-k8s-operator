@@ -66,14 +66,14 @@
                   </div>
                   <div class="p-matrix__content">
                     <h3 class="p-matrix__title">{{name}}</h3>
-                    <div class="" style="display: flex; gap: 0;">
-        <button class="p-tooltip--btm-center openLinkBtn" id="ui-button" data-link="{{url}}" {{#unless url}}disabled{{/unless}}>
+                    <div style="display: flex;">
+        <button class="p-tooltip--btm-center openLinkBtn customBtn" id="ui-button" data-link="{{url}}" {{#unless url}}disabled{{/unless}}>
                             <span class="iconify custom-icon" data-icon="mdi-web"></span>
                             <span class="p-tooltip__message" role="tooltip" id="default-tooltip">Visit UI</span>
                       </button>
 
                       {{#with this}}
-                        <button class="p-tooltip--btm-center" aria-controls="modal-{{@index}}" {{#unless (hasKeys api_endpoints)}}disabled{{/unless}}>
+                        <button class="p-tooltip--btm-center customBtn" aria-controls="modal-{{@index}}" {{#unless (hasKeys api_endpoints)}}disabled{{/unless}}>
                           <span class="iconify custom-icon" data-icon="mdi-api"></span>
                           <span class="p-tooltip__message" role="tooltip">View endpoints</span>
                         </button>
@@ -95,7 +95,7 @@
                         {{/getKeys}}
                       {{/with}}
 
-        <button class="p-tooltip--btm-center openLinkBtn" id="docs-button" data-link="{{api_docs}}" {{#unless api_docs}}disabled{{/unless}}>
+        <button class="p-tooltip--btm-center openLinkBtn customBtn" id="docs-button" data-link="{{api_docs}}" {{#unless api_docs}}disabled{{/unless}}>
                           <span class="iconify custom-icon" data-icon="mdi-file-document"></span>
                           <span class="p-tooltip__message" role="tooltip" id="default-tooltip">Read docs</span>
                       </button>
