@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.8, <4"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -560,10 +560,12 @@ name = "catalogue-k8s"
 version = "0.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "charmed-service-mesh-helpers" },
     { name = "cryptography" },
     { name = "jsonschema", version = "4.23.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "jsonschema", version = "4.24.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
     { name = "lightkube" },
+    { name = "lightkube-extensions" },
     { name = "lightkube-models" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "ops" },
@@ -601,6 +603,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", marker = "extra == 'dev'", specifier = "!=3.11.13" },
+    { name = "charmed-service-mesh-helpers", specifier = ">=0.2.0" },
     { name = "codespell", marker = "extra == 'dev'" },
     { name = "coverage", extras = ["toml"], marker = "extra == 'dev'" },
     { name = "cryptography" },
@@ -610,6 +613,7 @@ requires-dist = [
     { name = "jsonschema" },
     { name = "juju", marker = "extra == 'dev'" },
     { name = "lightkube" },
+    { name = "lightkube-extensions", git = "https://github.com/canonical/lightkube-extensions.git?rev=main" },
     { name = "lightkube-models" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = "==1.21.0" },
     { name = "ops" },
@@ -711,6 +715,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e6/c3/21cab7a6154b6a5ea330ae80de386e7665254835b9e98ecc1340b3a7de9a/cffi-1.17.1-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:c03e868a0b3bc35839ba98e74211ed2b05d2119be4e8a0f224fba9384f1fe02e", size = 460632, upload-time = "2024-09-04T20:45:17.284Z" },
     { url = "https://files.pythonhosted.org/packages/cb/b5/fd9f8b5a84010ca169ee49f4e4ad6f8c05f4e3545b72ee041dbbcb159882/cffi-1.17.1-cp39-cp39-win32.whl", hash = "sha256:e31ae45bc2e29f6b2abd0de1cc3b9d5205aa847cafaecb8af1476a609a2f6eb7", size = 171820, upload-time = "2024-09-04T20:45:18.762Z" },
     { url = "https://files.pythonhosted.org/packages/8c/52/b08750ce0bce45c143e1b5d7357ee8c55341b52bdef4b0f081af1eb248c2/cffi-1.17.1-cp39-cp39-win_amd64.whl", hash = "sha256:d016c76bdd850f3c626af19b0542c9677ba156e4ee4fccfdd7848803533ef662", size = 181290, upload-time = "2024-09-04T20:45:20.226Z" },
+]
+
+[[package]]
+name = "charmed-service-mesh-helpers"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic", version = "2.10.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "pydantic", version = "2.11.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e5/4f/c1f866c0483e6c19f733dc9d8946453c41c2ed63177a8716490ac37d7ce1/charmed_service_mesh_helpers-0.2.0.tar.gz", hash = "sha256:4e62fe6f917d4933610c2f8cfb30a90d46ea026fa302988cffb879abd423ca5a", size = 15348, upload-time = "2025-09-05T13:12:34.329Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ef/df/dc7086366b212da07ef027e3cc48824dc6a7b1193badc3879d231f6a4ef3/charmed_service_mesh_helpers-0.2.0-py3-none-any.whl", hash = "sha256:913e2a5bfb2db445e4b95085f8c2a8b4dea1036beedd229efca9217877c1da15", size = 13967, upload-time = "2025-09-05T13:12:33.237Z" },
 ]
 
 [[package]]
@@ -2440,6 +2457,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/fa/73/87edb7298f5312f746ef7797976b3d0399ea20a61d2fbcad341eb45648a8/lightkube-0.17.2.tar.gz", hash = "sha256:7b2ed3ce4be75e3a9f602e07bfb1692bbea34a207bfe930e44bc54c3a8ac55ed", size = 46430, upload-time = "2025-05-18T10:56:53.496Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/a4/f050bda05d706e8ea6e4430fed462fb3eb7c89b0ecbaa469a54ed7f191ab/lightkube-0.17.2-py3-none-any.whl", hash = "sha256:df36b228c8ed66c6c5aaeb0cc0c65f908e8aba731c65490a139442c5b55e0334", size = 40031, upload-time = "2025-05-18T10:56:55.505Z" },
+]
+
+[[package]]
+name = "lightkube-extensions"
+version = "0.0.1"
+source = { git = "https://github.com/canonical/lightkube-extensions.git?rev=main#f82588c9f9b981fef931cc06441fd8df6e162fee" }
+dependencies = [
+    { name = "jinja2" },
+    { name = "lightkube" },
 ]
 
 [[package]]
