@@ -49,6 +49,6 @@ async def test_ingress(ops_test: OpsTest):
     await ops_test.model.wait_for_idle(apps=["catalogue", "traefik"], status="active")
 
     address = await get_unit_address(ops_test, "traefik", 0)
-    url = f"https://{address}/{ops_test.model.name}-catalogue"
+    url = f"http://{address}/{ops_test.model.name}-catalogue"
     response = requests.get(url, verify=False)
     assert response.status_code == 200
