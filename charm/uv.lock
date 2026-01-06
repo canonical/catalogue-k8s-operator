@@ -2461,8 +2461,8 @@ wheels = [
 
 [[package]]
 name = "lightkube-extensions"
-version = "0.0.1"
-source = { git = "https://github.com/canonical/lightkube-extensions.git?rev=main#f82588c9f9b981fef931cc06441fd8df6e162fee" }
+version = "999.999.999"
+source = { git = "https://github.com/canonical/lightkube-extensions.git?rev=main#5deb469c916c24c0f22b65102768921274ea05ca" }
 dependencies = [
     { name = "jinja2" },
     { name = "lightkube" },
