@@ -14,7 +14,7 @@ dependencies = [
   "opentelemetry-exporter-otlp-proto-http==1.21.0",
   "pydantic>=2",  # istio-beacon lib requirement,
   "charmed-service-mesh-helpers>=0.2.0", # istio-beacon lib requirement,
-  "lightkube-extensions==0.3.0", # istio-beacon lib requirement,
+  "lightkube-extensions", # istio-beacon lib requirement,
 ]
 
 [project.optional-dependencies]

@@ -613,7 +613,7 @@ requires-dist = [
     { name = "jsonschema" },
     { name = "juju", marker = "extra == 'dev'" },
     { name = "lightkube" },
-    { name = "lightkube-extensions", specifier = "==0.3.0" },
+    { name = "lightkube-extensions" },
     { name = "lightkube-models" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = "==1.21.0" },
     { name = "ops" },
