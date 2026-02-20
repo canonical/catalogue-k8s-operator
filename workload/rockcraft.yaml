@@ -15,7 +15,8 @@ parts:
     npm-include-node: true
     npm-node-version: "20.18.3"
     override-build: |
-      npm install
+      craftctl default
+      npm install --include=dev
       npm run build
       mkdir -p ${CRAFT_PART_INSTALL}/web
       cp -R dist/* ${CRAFT_PART_INSTALL}/web/
@@ -28,6 +29,9 @@ parts:
     override-build: |
       mkdir -p ${CRAFT_PART_INSTALL}/etc/nginx
       cp ./nginx.conf ${CRAFT_PART_INSTALL}/etc/nginx/nginx.conf
+    override-prime: |
+      craftctl default
+      rm -f usr/bin/pebble bin/pebble
 
 services:
   catalogue:
