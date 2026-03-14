@@ -1,0 +1,80 @@
+name: Terraform
+
+# Terraform has no native "module version" field, unlike pyproject.toml: version = "1.2.3".
+# Add a terraform/VERSION file to each charm repo containing just 1.2.3.
+# We are currently on track 2 so the version should be 2.0.0, and then we can update it to 2.1.0, etc as we make changes.
+# On PR merge, (if the terraform/VERSION changes) create a tag for that version.
+# Add a workflow lint job to check if TF files have changed and then ensure that the PR updated the terraform/VERSION:
+
+on:
+  pull_request:
+    paths:
+      - "**/*.tf"
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform/VERSION"
+
+jobs:
+  lint-tf-version:
+    name: Lint terraform version
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check terraform/VERSION was bumped
+        run: |
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          if echo "$changed" | grep -qE '^terraform/VERSION$'; then
+            echo "terraform/VERSION was updated — OK"
+          else
+            echo "ERROR: Terraform files changed but terraform/VERSION was not updated."
+            echo "Please bump the version in terraform/VERSION."
+            exit 1
+          fi
+
+      - name: Validate semver format
+        run: |
+          version=$(tr -d '[:space:]' < terraform/VERSION)
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: terraform/VERSION '$version' is not valid semver (expected X.Y.Z)"
+            exit 1
+          fi
+          echo "Version $version is valid semver."
+
+  tag-terraform-release:
+    name: Tag terraform release
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read and validate version
+        id: version
+        run: |
+          version=$(tr -d '[:space:]' < terraform/VERSION)
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: terraform/VERSION '$version' is not valid semver (expected X.Y.Z)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tag="terraform/v${VERSION}"
+          if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
+            echo "Tag ${tag} already exists, skipping."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${tag}"
+          git push origin "${tag}"
