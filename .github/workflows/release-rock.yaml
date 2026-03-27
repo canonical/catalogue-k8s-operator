@@ -1,0 +1,36 @@
+name: Release Rock
+
+on:
+  push:
+    workflow_dispatch: {}
+    branches:
+      - main
+    paths:
+      - workload/**
+
+jobs:
+  release-rock:
+    name: Release Rock
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install rockcraft
+        run: sudo snap install rockcraft --classic
+
+      - name: Pack rock
+        run: cd workload && rockcraft pack
+
+      - name: Upload rock to ghcr.io
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rock_file=$(ls workload/*.rock)
+          rockcraft.skopeo --insecure-policy copy \
+            oci-archive:"${rock_file}" \
+            docker://ghcr.io/canonical/catalogue-k8s-operator:latest \
+            --dest-creds "${GHCR_USER}:${GHCR_TOKEN}"
