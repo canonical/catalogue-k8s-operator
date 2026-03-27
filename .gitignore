@@ -38,3 +38,7 @@ override.tf.json
 .terraformrc
 terraform.rc
 .terraform.lock.hcl
+
+# Workload UI build artifacts
+workload/ui/node_modules/
+workload/ui/dist/

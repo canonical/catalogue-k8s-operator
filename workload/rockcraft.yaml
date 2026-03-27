@@ -9,6 +9,18 @@ platforms:
   amd64:
 
 parts:
+  ui:
+    plugin: npm
+    source: ./ui
+    npm-include-node: true
+    npm-node-version: "20.18.3"
+    override-build: |
+      craftctl default
+      npm install --include=dev
+      npm run build
+      mkdir -p ${CRAFT_PART_INSTALL}/web
+      cp -R dist/* ${CRAFT_PART_INSTALL}/web/
+
   catalogue:
     plugin: nil
     source: .
@@ -16,8 +28,11 @@ parts:
       - nginx
     override-build: |
       mkdir -p ${CRAFT_PART_INSTALL}/etc/nginx
-      cp -R ./ui ${CRAFT_PART_INSTALL}/web
       cp ./nginx.conf ${CRAFT_PART_INSTALL}/etc/nginx/nginx.conf
+    override-prime: |
+      craftctl default
+      rm -f usr/bin/pebble bin/pebble
+
 services:
   catalogue:
     command: nginx -g 'daemon off;'
