@@ -4,8 +4,23 @@ name: catalogue-k8s
 type: charm
 summary: Catalogue for discovering charm UIs
 description: |
-  The catalogue is a charmed operator helping users to locate the user
-  interfaces of the charms related to it.
+  Catalogue K8s is a Juju charm that deploys a web-based service directory on Kubernetes,
+  providing a central landing page for discovering and navigating to the user interfaces of
+  other charms deployed alongside it. It is part of the Canonical Observability Stack (COS):
+  https://documentation.ubuntu.com/observability
+
+  Charms register themselves automatically via the catalogue relation, so the directory stays
+  up to date as applications are added or removed from the model.
+
+  Key features:
+
+  - Automatic service discovery through Juju relations — related charms appear in the
+    catalogue without manual configuration.
+  - Each related charm provides its own catalogue entry — including name, URL, and icon —
+    through the relation, giving charm authors full control over how their application
+    appears in the directory.
+  - TLS support via the certificates relation.
+  - Ingress support for external access through reverse proxies such as Traefik.
 
 links:
   documentation: https://discourse.charmhub.io/t/catalogue-k8s-index/17904
