@@ -16,8 +16,9 @@ description: |
 
   - Automatic service discovery through Juju relations — related charms appear in the
     catalogue without manual configuration.
-  - Customizable title, tagline, description, and external links to tailor the landing page
-    to your deployment.
+  - Each related charm provides its own catalogue entry — including name, URL, and icon —
+    through the relation, giving charm authors full control over how their application
+    appears in the directory.
   - TLS support via the certificates relation.
   - Ingress support for external access through reverse proxies such as Traefik.
 
