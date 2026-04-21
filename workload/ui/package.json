@@ -1,0 +1,20 @@
+{
+  "name": "catalogue-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@iconify/react": "^5.2.0",
+    "preact": "^10.25.4"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.9.4",
+    "sass": "^1.97.3",
+    "vanilla-framework": "^3.7.1",
+    "vite": "^6.1.0"
+  }
+}
