@@ -39,7 +39,7 @@ parts:
   charm:
     source: .
     plugin: uv
-    build-packages: [git]
+    build-packages: [cargo, git]
     build-snaps: [astral-uv]
     # FIXME: at pack time, the parent folder doesn't exist (including the '.git' folder)
     override-build: |
@@ -78,8 +78,11 @@ requires:
     limit: 1
     description: |
       Certificate and key files for the Catalogue web.
-  tracing:
+  charm-tracing:
     interface: tracing
+    limit: 1
+  receive-ca-cert:
+    interface: certificate_transfer
     limit: 1
   service-mesh:
     limit: 1

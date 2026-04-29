@@ -10,8 +10,9 @@ output "provides" {
 
 output "requires" {
   value = {
-    certificates = "certificates",
-    ingress      = "ingress",
-    tracing      = "tracing",
+    certificates    = "certificates",
+    ingress         = "ingress",
+    charm-tracing   = "charm-tracing",
+    receive-ca-cert = "receive-ca-cert",
   }
 }
