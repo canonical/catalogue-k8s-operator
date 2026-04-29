@@ -9,10 +9,9 @@ from pathlib import Path
 import pytest
 import requests
 import yaml
+from helpers import get_unit_address
 from pytest_operator.plugin import OpsTest
 from tenacity import retry, stop_after_attempt, wait_exponential
-
-from helpers import get_unit_address
 
 logger = logging.getLogger(__name__)
 
