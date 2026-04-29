@@ -19,7 +19,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install rockcraft
-        run: sudo snap install rockcraft --classic
+        run: |
+          sudo snap install concierge --classic
+          sudo concierge prepare -p crafts --extra-snaps=just,yq,syft
 
       - name: Pack rock
         run: cd workload && rockcraft pack
