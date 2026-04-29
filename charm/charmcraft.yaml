@@ -78,6 +78,11 @@ requires:
     limit: 1
     description: |
       Certificate and key files for the Catalogue web.
+  logging:
+    interface: loki_push_api
+    optional: true
+    description: |
+      Receives Loki's push api endpoint address to push logs to, and forwards charm's built-in alert rules to Loki.
   tracing:
     interface: tracing
     limit: 1

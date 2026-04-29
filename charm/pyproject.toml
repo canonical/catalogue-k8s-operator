@@ -15,6 +15,7 @@ dependencies = [
   "pydantic>=2",  # istio-beacon lib requirement,
   "charmed-service-mesh-helpers>=0.2.0", # istio-beacon lib requirement,
   "lightkube-extensions", # istio-beacon lib requirement,
+  "cosl",  # loki_push_api lib requirement,
 ]
 
 [project.optional-dependencies]

@@ -12,6 +12,7 @@ output "requires" {
   value = {
     certificates = "certificates",
     ingress      = "ingress",
+    logging      = "logging",
     tracing      = "tracing",
   }
 }

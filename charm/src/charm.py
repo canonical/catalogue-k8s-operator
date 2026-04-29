@@ -22,6 +22,7 @@ from charms.catalogue_k8s.v1.catalogue import (
     CatalogueProvider,
 )
 from charms.istio_beacon_k8s.v0.service_mesh import ServiceMeshConsumer
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.tls_certificates_interface.v4.tls_certificates import (
@@ -112,6 +113,7 @@ class CatalogueCharm(CharmBase):
             ),
         )
 
+        self._log_forwarding = LogForwarder(self, relation_name="logging")
         self._mesh = ServiceMeshConsumer(self)
 
         self.framework.observe(
