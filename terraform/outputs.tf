@@ -4,14 +4,17 @@ output "app_name" {
 
 output "provides" {
   value = {
-    catalogue = "catalogue",
+    catalogue        = "catalogue",
+    provide_cmr_mesh = "provide-cmr-mesh",
   }
 }
 
 output "requires" {
   value = {
-    certificates = "certificates",
-    ingress      = "ingress",
-    tracing      = "tracing",
+    certificates     = "certificates",
+    ingress          = "ingress",
+    require_cmr_mesh = "require-cmr-mesh",
+    service_mesh     = "service-mesh",
+    tracing          = "tracing",
   }
 }
