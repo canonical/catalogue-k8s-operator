@@ -11,6 +11,7 @@ dependencies = [
   "lightkube-models",
   "jsonschema",
   "cryptography",
+  "cosl",
   "opentelemetry-exporter-otlp-proto-http==1.21.0",
   "pydantic>=2",  # istio-beacon lib requirement,
   "charmed-service-mesh-helpers>=0.2.0", # istio-beacon lib requirement,
@@ -35,6 +36,7 @@ dev = [
   "pytest-interface-tester",
   # Integration
   "juju",
+  "jubilant",
   "pytest-operator",
   "aiohttp!=3.11.13",  # Yanked
   "prometheus-api-client",

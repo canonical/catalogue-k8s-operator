@@ -86,6 +86,11 @@ requires:
     interface: service_mesh
     description: |
       Subscribe this charm into a service mesh to enforce authorization policies.
+  logging:
+    interface: loki_push_api
+    optional: true
+    description: |
+      Receives Loki's push API endpoint address to push logs to, and forwards charm's built-in alert rules to Loki.
   require-cmr-mesh:
     interface: cross_model_mesh
     description: |

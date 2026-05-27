@@ -18,6 +18,8 @@ http {
     default_type       application/octet-stream;
     sendfile           on;
     keepalive_timeout  65;
+    access_log         /dev/stdout;
+    error_log          /dev/stderr;
 
     upstream self {
       server localhost:80;
@@ -43,6 +45,8 @@ http {{
     sendfile            on;
     ssl_session_cache   shared:SSL:10m;
     ssl_session_timeout 10m;
+    access_log          /dev/stdout;
+    error_log           /dev/stderr;
 
     server {{
         listen               443 ssl;
