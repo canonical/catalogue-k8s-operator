@@ -1,0 +1,16 @@
+file:
+  /etc/nginx/nginx.conf:
+    exists: true
+  /web/index.html:
+    exists: true
+
+command:
+  nginx-version:
+    exec: "nginx -v"
+    exit-status: 0
+    stderr:
+      - "/nginx/"
+
+process:
+  nginx:
+    running: true
