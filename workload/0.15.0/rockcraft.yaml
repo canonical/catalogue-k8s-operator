@@ -2,7 +2,7 @@ name: catalogue
 summary: A service catalogue for workloads running in Juju.
 description: A service catalogue for workloads running in Juju.
 version: "0.15.0"
-base: ubuntu@22.04
+base: ubuntu@26.04
 license: Apache-2.0
 
 platforms:
@@ -10,16 +10,17 @@ platforms:
 
 parts:
   ui:
-    plugin: npm
+    plugin: nil
     source: ./ui
-    npm-include-node: true
-    npm-node-version: "20.18.3"
+    build-snaps:
+      - node/20/stable
     override-build: |
-      craftctl default
       npm install --include=dev
       npm run build
       mkdir -p ${CRAFT_PART_INSTALL}/web
       cp -R dist/* ${CRAFT_PART_INSTALL}/web/
+    stage:
+      - web
 
   catalogue:
     plugin: nil

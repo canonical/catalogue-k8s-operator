@@ -1,0 +1,29 @@
+set allow-duplicate-recipes
+set allow-duplicate-variables
+import? 'rocks.just'
+
+[private]
+@default:
+  just --list
+  echo ""
+  echo "For help with a specific recipe, run: just --usage <recipe>"
+
+# Release rock to GHCR with the minor version tag (this rock is not in OCI Factory)
+[group("release")]
+release-ghcr version=latest_version github_user="observability-noctua-bot":
+  #!/usr/bin/env bash
+  set -e
+  if [[ -z "$GITHUB_TOKEN" ]]; then echo "× Please export GITHUB_TOKEN for the user {{github_user}}"; exit 1; fi
+  if [ ! -e {{version}}/*.rock ]; then echo "× Error: rock not found. Please run 'just pack {{version}}' first."; exit 2; fi
+  # Extract minor version (e.g., 0.15.0 -> 0.15)
+  minor_version="$(echo "{{version}}" | grep -oP '^\d+\.\d+')"
+  sudo rockcraft.skopeo --insecure-policy copy \
+    "oci-archive:$(realpath ./{{version}}/*.rock)" \
+    "docker://ghcr.io/canonical/{{rock_name}}:${minor_version}" \
+    --dest-creds "{{github_user}}:${GITHUB_TOKEN}"
+  echo "✓ {{rock_name}} pushed to GHCR with tag ':${minor_version}'"
+
+# No-op: this rock is not published to OCI Factory
+[group("release")]
+release-oci-factory version=latest_version support="minor" risk="stable":
+  @echo "✓ Skipped: {{rock_name}} is not published to OCI Factory"

@@ -20,3 +20,10 @@ jobs:
     secrets: inherit
     with:
       charm-path: charm
+
+  pull-request-rock:
+    name: PR for rock
+    uses: canonical/observability/.github/workflows/rock-pull-request.yaml@v2
+    secrets: inherit
+    with:
+      rock-path: workload

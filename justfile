@@ -6,7 +6,7 @@ dev_image := "ghcr.io/canonical/catalogue-k8s-operator:dev"
 
 # Build the rock using rockcraft
 build-rock:
-    cd workload && rockcraft pack
+    cd workload && just pack
 
 # Build the charm using charmcraft
 build-charm:
@@ -14,9 +14,9 @@ build-charm:
 
 # Build both the charm and the rock, placing artifacts in the project root
 build-all: build-rock build-charm
-    cp workload/{{ rock_file }} ./
+    cp workload/0.15.0/{{ rock_file }} ./
     cp charm/{{ charm_file }} ./
 
 # Build the rock and push it to ghcr.io as a dev image
 update-dev-rock: build-rock
-    rockcraft.skopeo --insecure-policy copy oci-archive:workload/{{ rock_file }} docker://{{ dev_image }}
+    rockcraft.skopeo --insecure-policy copy oci-archive:workload/0.15.0/{{ rock_file }} docker://{{ dev_image }}
