@@ -30,4 +30,4 @@ jobs:
     uses: canonical/observability/.github/workflows/rock-release-dev.yaml@v2
     secrets: inherit
     with:
-      rock-path: rock
+      rock-path: workload
