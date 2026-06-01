@@ -14,6 +14,8 @@ permissions:
   actions: read
   # Write permission needed for the reusable workflow to push git tags
   contents: write
+  # Required for pushing rock to GHCR
+  packages: write
 
 jobs:
   release:
@@ -22,3 +24,10 @@ jobs:
     with:
       charm-path: charm
       default-track: dev
+
+  release-rock:
+    # rock-release-dev is actually releasing to ghcr in this case, as the `just release-ghcr` recipe is overridden
+    uses: canonical/observability/.github/workflows/rock-release-dev.yaml@v2
+    secrets: inherit
+    with:
+      rock-path: rock
