@@ -19,9 +19,9 @@ release-ghcr version=latest_version github_user="observability-noctua-bot":
   minor_version="$(echo "{{version}}" | grep -oP '^\d+\.\d+')"
   sudo rockcraft.skopeo --insecure-policy copy \
     "oci-archive:$(realpath ./{{version}}/*.rock)" \
-    "docker://ghcr.io/canonical/{{rock_name}}:${minor_version}" \
+    "docker://ghcr.io/canonical/catalogue-k8s-operator:${minor_version}" \
     --dest-creds "{{github_user}}:${GITHUB_TOKEN}"
-  echo "✓ {{rock_name}} pushed to GHCR with tag ':${minor_version}'"
+  echo "✓ catalogue pushed to GHCR with tag ':${minor_version}'"
 
 # No-op: this rock is not published to OCI Factory
 [group("release")]
