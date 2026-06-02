@@ -23,7 +23,7 @@ description: |
   - Ingress support for external access through reverse proxies such as Traefik.
 
 links:
-  documentation: https://discourse.charmhub.io/t/catalogue-k8s-index/17904
+  documentation: https://documentation.ubuntu.com/observability/latest/
   website: https://charmhub.io/catalogue-k8s
   source: https://github.com/canonical/catalogue-k8s-operator
   issues: https://github.com/canonical/catalogue-k8s-operator/issues
