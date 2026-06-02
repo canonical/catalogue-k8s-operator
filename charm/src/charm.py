@@ -9,12 +9,11 @@
 import json
 import logging
 import socket
-import subprocess
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional, cast
 from urllib.parse import urlparse, urlunparse
 
+import ops_tracing
 from charms.catalogue_k8s.v1.catalogue import (
     CatalogueConsumer,
     CatalogueItem,
@@ -23,8 +22,6 @@ from charms.catalogue_k8s.v1.catalogue import (
 )
 from charms.istio_beacon_k8s.v0.service_mesh import ServiceMeshConsumer
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
-from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
@@ -42,6 +39,7 @@ logger = logging.getLogger(__name__)
 ROOT_PATH = "/web"
 CONFIG_PATH = ROOT_PATH + "/config.json"
 
+
 @dataclass
 class TLSConfig:
     """TLS configuration received by the charm over the `certificates` relation."""
@@ -50,19 +48,9 @@ class TLSConfig:
     ca_cert: str
     private_key: str
 
-@trace_charm(
-    tracing_endpoint="tracing_endpoint",
-    server_cert="server_ca_cert_path",
-    extra_types=(
-        CatalogueProvider,
-        TLSCertificatesRequiresV4,
-        IngressPerAppRequirer,
-    ),
-)
+
 class CatalogueCharm(CharmBase):
     """Catalogue charm class."""
-
-    _ca_path = "/usr/local/share/ca-certificates/ca.crt"
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -71,13 +59,13 @@ class CatalogueCharm(CharmBase):
 
         self.unit.set_ports(80)
 
-        self._tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
-
-        self.tracing_endpoint, self.server_ca_cert_path = charm_tracing_config(
-            self._tracing, self._ca_path
+        self.charm_tracing = ops_tracing.Tracing(
+            self,
+            tracing_relation_name="tracing",
+            ca_relation_name="receive-ca-cert",
         )
-        self._info = CatalogueProvider(charm=self)
 
+        self._info = CatalogueProvider(charm=self)
 
         self._csr_attributes = CertificateRequestAttributes(
             # the `common_name` field is required but limited to 64 characters.
@@ -193,19 +181,13 @@ class CatalogueCharm(CharmBase):
         self._ingress.provide_ingress_requirements(scheme=parsed.scheme, port=port)
 
     def _push_certs(self):
-        ca_cert_path = Path(self._ca_path)
         if tls_config := self._tls_config:
             self.workload.push(CERT_PATH, tls_config.server_cert, make_dirs=True)
             self.workload.push(KEY_PATH, tls_config.private_key, make_dirs=True)
             self.workload.push(CA_CERT_PATH, tls_config.ca_cert, make_dirs=True)
-            # write CA certificate to the charm container for charm tracing
-            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
-            ca_cert_path.write_text(tls_config.ca_cert)
-            subprocess.check_output(["update-ca-certificates", "--fresh"])
         else:
             for path in [KEY_PATH, CERT_PATH, CA_CERT_PATH]:
                 self.workload.remove_path(path, recursive=True)
-            ca_cert_path.unlink(missing_ok=True)
 
     def _configure(self, items, push_certs: bool = False):
         if not self.workload.can_connect():
@@ -368,6 +350,7 @@ class CatalogueCharm(CharmBase):
     @property
     def _tls_available(self) -> bool:
         return bool(self._tls_config)
+
 
 if __name__ == "__main__":
     main(CatalogueCharm)
