@@ -35,14 +35,11 @@ dev = [
   # Interface
   "pytest-interface-tester",
   # Integration
-  "juju",
-  "jubilant",
-  "pytest-operator",
-  "aiohttp!=3.11.13",  # Yanked
+  "jubilant>=1.8,<2",
+  "pytest-jubilant>=2,<3",
   "prometheus-api-client",
   "requests",
   "tenacity",
-  "sh",
 ]
 
 # Testing tools configuration
@@ -81,9 +78,9 @@ pythonPlatform = "Linux"
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "INFO"
-asyncio_mode = "auto"
+
 addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
-markers = ["setup", "work", "teardown"]
+markers = ["juju_setup", "juju_teardown"]
 
 [tool.codespell]
 skip = ".git,.tox,build,venv*"

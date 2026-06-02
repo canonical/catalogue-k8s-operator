@@ -2,25 +2,21 @@
 # See LICENSE file for licensing details.
 
 import logging
-from subprocess import PIPE, check_output
 
-from pytest_operator.plugin import OpsTest
+import jubilant
 
 logger = logging.getLogger(__name__)
 
 
-async def get_unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
-    assert ops_test.model
-    status = await ops_test.model.get_status()  # noqa: F821
-    return status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
+def get_unit_address(juju: jubilant.Juju, app_name: str, unit_num: int) -> str:
+    """Get the IP address of a unit."""
+    status = juju.status()
+    return status.apps[app_name].units[f"{app_name}/{unit_num}"].address
 
 
-async def run_juju_ssh_command(
-    model_full_name: str, container_name: str, unit_name: str, command: str
-):
-    return check_output(
-        f"JUJU_MODEL={model_full_name} juju ssh --container {container_name} {unit_name} '{command}' ",
-        stderr=PIPE,
-        shell=True,
-        universal_newlines=True,
-    )
+def run_juju_ssh_command(
+    juju: jubilant.Juju, container_name: str, unit_name: str, command: str
+) -> str:
+    """Run a command via juju ssh."""
+    task = juju.exec(command, unit=unit_name, container=container_name)
+    return task.stdout
