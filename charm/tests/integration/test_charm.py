@@ -38,7 +38,7 @@ def test_tls(juju: jubilant.Juju):
         channel="1/edge",
         trust=True,
     )
-    juju.integrate(APP_NAME, SSC_APP_NAME)
+    juju.integrate(f"{APP_NAME}:certificates", f"{SSC_APP_NAME}:certificates")
     juju.wait(active_idle, timeout=5 * 60)
 
     address = get_unit_address(juju, APP_NAME, 0)
