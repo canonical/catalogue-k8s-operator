@@ -80,6 +80,11 @@ requires:
       Certificate and key files for the Catalogue web.
   tracing:
     interface: tracing
+    optional: true
+    limit: 1
+  receive-ca-cert:
+    interface: certificate_transfer
+    optional: true
     limit: 1
   service-mesh:
     limit: 1

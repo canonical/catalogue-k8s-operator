@@ -4,8 +4,9 @@ import logging
 import os
 from pathlib import Path
 
-import jubilant
 import pytest
+import sh
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +18,16 @@ def charm_path() -> Path:
     Set CHARM_PATH env var to use a pre-built charm, otherwise pack it.
     """
     if charm_file := os.environ.get("CHARM_PATH"):
-        return Path(charm_file)
+        return Path(charm_file).resolve()
 
-    return jubilant.pack(".")
+    sh.charmcraft.pack()  # type: ignore[attr-defined]
+    charms = sorted(Path(".").glob("*.charm"))
+    assert charms, "No .charm file found after 'charmcraft pack'"
+    return charms[-1].resolve()
 
 
 @pytest.fixture(scope="module")
-def juju(juju: jubilant.Juju) -> jubilant.Juju:
-    """Re-export the juju fixture from pytest-jubilant."""
-    return juju
+def resources() -> dict:
+    """Resources for the charm."""
+    metadata = yaml.safe_load(Path("./charmcraft.yaml").read_text())
+    return {"catalogue-image": metadata["resources"]["catalogue-image"]["upstream-source"]}

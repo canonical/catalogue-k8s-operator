@@ -8,32 +8,26 @@ from pathlib import Path
 import jubilant
 import pytest
 import requests
-import yaml
-from helpers import get_unit_address
+from helpers import active_idle, get_unit_address
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-APP_NAME = METADATA["name"]
+APP_NAME = "catalogue-k8s"
 TRAEFIK_APP_NAME = "traefik"
-RESOURCES = {"catalogue-image": METADATA["resources"]["catalogue-image"]["upstream-source"]}
 
 
 @pytest.mark.juju_setup
-def test_build_and_deploy(juju: jubilant.Juju, charm_path: Path):
+def test_build_and_deploy(juju: jubilant.Juju, charm_path: Path, resources: dict):
     """Deploy the charm and wait for it to become active."""
-    juju.deploy(charm_path, app=APP_NAME, resources=RESOURCES)
-    juju.wait(jubilant.all_active, timeout=1000)
-
-    status = juju.status()
-    assert status.apps[APP_NAME].units[f"{APP_NAME}/0"].workload_status.current == "active"
+    juju.deploy(charm_path, app=APP_NAME, resources=resources)
+    juju.wait(active_idle, timeout=5 * 60)
 
 
 def test_ingress(juju: jubilant.Juju):
     """Test ingress integration with traefik."""
     juju.deploy("traefik-k8s", app=TRAEFIK_APP_NAME, channel="latest/edge", trust=True)
     juju.integrate(f"{APP_NAME}:ingress", TRAEFIK_APP_NAME)
-    juju.wait(jubilant.all_active, timeout=600)
+    juju.wait(active_idle, timeout=5 * 60)
 
     address = get_unit_address(juju, TRAEFIK_APP_NAME, 0)
     url = f"http://{address}/{juju.model}-{APP_NAME}"

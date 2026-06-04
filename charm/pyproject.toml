@@ -6,13 +6,12 @@ version = "0.0"
 requires-python = "~=3.14.0"
 
 dependencies = [
-  "ops",
+  "ops[tracing]>=2.20.0",
   "lightkube",
   "lightkube-models",
   "jsonschema",
   "cryptography",
   "cosl",
-  "opentelemetry-exporter-otlp-proto-http==1.21.0",
   "pydantic>=2",  # istio-beacon lib requirement,
   "charmed-service-mesh-helpers>=0.2.0", # istio-beacon lib requirement,
   "lightkube-extensions", # istio-beacon lib requirement,
@@ -40,6 +39,7 @@ dev = [
   "prometheus-api-client",
   "requests",
   "tenacity",
+  "sh",
 ]
 
 # Testing tools configuration
@@ -78,7 +78,6 @@ pythonPlatform = "Linux"
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "INFO"
-
 addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
 markers = ["juju_setup", "juju_teardown"]
 
