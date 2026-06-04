@@ -1,26 +1,15 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import logging
-from subprocess import PIPE, check_output
-
-from pytest_operator.plugin import OpsTest
-
-logger = logging.getLogger(__name__)
+import jubilant
 
 
-async def get_unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
-    assert ops_test.model
-    status = await ops_test.model.get_status()  # noqa: F821
-    return status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
+def active_idle(status: jubilant.Status) -> bool:
+    """Check if all apps are active and all agents are idle."""
+    return jubilant.all_active(status) and jubilant.all_agents_idle(status)
 
 
-async def run_juju_ssh_command(
-    model_full_name: str, container_name: str, unit_name: str, command: str
-):
-    return check_output(
-        f"JUJU_MODEL={model_full_name} juju ssh --container {container_name} {unit_name} '{command}' ",
-        stderr=PIPE,
-        shell=True,
-        universal_newlines=True,
-    )
+def get_unit_address(juju: jubilant.Juju, app_name: str, unit_num: int) -> str:
+    """Get the IP address of a unit."""
+    status = juju.status()
+    return status.apps[app_name].units[f"{app_name}/{unit_num}"].address

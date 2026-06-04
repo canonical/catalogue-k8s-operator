@@ -2,53 +2,34 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-
 import logging
 from pathlib import Path
 
+import jubilant
 import pytest
 import requests
-import sh
-import yaml
-from helpers import get_unit_address
-from pytest_operator.plugin import OpsTest
+from helpers import active_idle, get_unit_address
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
+APP_NAME = "catalogue-k8s"
+TRAEFIK_APP_NAME = "traefik"
 
 
-@pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest, catalogue_charm):
-    assert ops_test.model
-    # Given a fresh build of the charm
-    # When deploying it
-    # Then it should eventually go idle/active
-    resources = {"catalogue-image": METADATA["resources"]["catalogue-image"]["upstream-source"]}
-    await ops_test.model.deploy(catalogue_charm, resources=resources, application_name="catalogue")
-
-    # issuing fake update_status just to trigger an event
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(
-            apps=["catalogue"],
-            status="active",
-            raise_on_blocked=True,
-            timeout=1000,
-        )
-
-    assert ops_test.model.applications["catalogue"]
-    assert ops_test.model.applications["catalogue"].units[0].workload_status == "active"
+@pytest.mark.juju_setup
+def test_build_and_deploy(juju: jubilant.Juju, charm_path: Path, resources: dict):
+    """Deploy the charm and wait for it to become active."""
+    juju.deploy(charm_path, app=APP_NAME, resources=resources)
+    juju.wait(active_idle, timeout=5 * 60)
 
 
-async def test_ingress(ops_test: OpsTest):
-    assert ops_test.model
-    sh.juju.deploy(  # type: ignore
-        "traefik-k8s", "traefik", channel="latest/edge", trust=True, model=ops_test.model.name
-    )
-    sh.juju.relate("catalogue:ingress", "traefik", model=ops_test.model.name)  # type: ignore
-    await ops_test.model.wait_for_idle(apps=["catalogue", "traefik"], status="active")
+def test_ingress(juju: jubilant.Juju):
+    """Test ingress integration with traefik."""
+    juju.deploy("traefik-k8s", app=TRAEFIK_APP_NAME, channel="latest/edge", trust=True)
+    juju.integrate(f"{APP_NAME}:ingress", TRAEFIK_APP_NAME)
+    juju.wait(active_idle, timeout=5 * 60)
 
-    address = await get_unit_address(ops_test, "traefik", 0)
-    url = f"http://{address}/{ops_test.model.name}-catalogue"
-    response = requests.get(url, verify=False)
+    address = get_unit_address(juju, TRAEFIK_APP_NAME, 0)
+    url = f"http://{address}/{juju.model}-{APP_NAME}"
+    response = requests.get(url, verify=False, timeout=10)
     assert response.status_code == 200
