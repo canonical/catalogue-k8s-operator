@@ -9,18 +9,13 @@ from pathlib import Path
 import jubilant
 import pytest
 import requests
-from helpers import get_unit_address
+from helpers import active_idle, get_unit_address
 
 logger = logging.getLogger(__name__)
 
 APP_NAME = "catalogue-k8s"
 SSC_APP_NAME = "ssc"
 PROMETHEUS_APP_NAME = "prometheus-k8s"
-
-
-def active_idle(status: jubilant.Status) -> bool:
-    """Check if all apps are active and all agents are idle."""
-    return jubilant.all_active(status) and jubilant.all_agents_idle(status)
 
 
 @pytest.mark.juju_setup

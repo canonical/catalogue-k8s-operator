@@ -10,18 +10,13 @@ from pathlib import Path
 import jubilant
 import pytest
 import requests
-from helpers import get_unit_address
+from helpers import active_idle, get_unit_address
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger(__name__)
 
 APP_NAME = "catalogue-k8s"
 LOKI_APP_NAME = "loki"
-
-
-def active_idle(status: jubilant.Status) -> bool:
-    """Check if all apps are active and all agents are idle."""
-    return jubilant.all_active(status) and jubilant.all_agents_idle(status)
 
 
 @pytest.mark.juju_setup
