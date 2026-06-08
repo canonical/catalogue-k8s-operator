@@ -63,7 +63,7 @@ extend-exclude = ["__pycache__", "*.egg_info"]
 select = ["E", "W", "F", "C", "N", "R", "D", "I001"]
 # Ignore E501 because using black creates errors with this
 # Ignore D107 Missing docstring in __init__
-ignore = ["E501", "D107", "D203", "D213"]
+ignore = ["E501", "D107"]
 # D100, D101, D102, D103: Ignore missing docstrings in tests
 per-file-ignores = {"tests/*" = ["D100","D101","D102","D103"]}
 
