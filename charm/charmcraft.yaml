@@ -33,7 +33,7 @@ assumes:
   - juju >= 3.6
 
 platforms:
-  ubuntu@24.04:amd64:
+  ubuntu@26.04:amd64:
 
 parts:
   charm:
@@ -54,7 +54,7 @@ resources:
   catalogue-image:
     type: oci-image
     description: OCI image for the service catalogue
-    upstream-source: ghcr.io/canonical/catalogue-k8s-operator:latest
+    upstream-source: ghcr.io/canonical/catalogue-k8s-operator:0.15
 
 provides:
   catalogue:
