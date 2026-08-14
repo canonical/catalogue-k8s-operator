@@ -8,6 +8,11 @@ import? 'rocks.just'
   echo ""
   echo "For help with a specific recipe, run: just --usage <recipe>"
 
+# No-op: this rock's upstream lives in the same repository, so there is nothing to fetch
+[group("maintenance")]
+@update:
+  echo "✓ Skipped: {{rock_name}} upstream lives in this repository"
+
 # Release rock to GHCR with the minor version tag (this rock is not in OCI Factory)
 [group("release")]
 release-ghcr version=latest_version github_user="observability-noctua-bot":
