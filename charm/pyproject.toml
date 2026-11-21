@@ -50,6 +50,7 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
+fail_under = 90
 
 # Linting tools configuration
 [tool.ruff]
@@ -92,6 +93,12 @@ minversion = "6.0"
 log_cli_level = "INFO"
 addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
 markers = ["juju_setup", "juju_teardown"]
+filterwarnings = [
+    "error",
+    # Vendored-library deprecations we cannot fix:
+    "ignore::DeprecationWarning:charms.tls_certificates_interface.v4.tls_certificates",
+    "ignore::DeprecationWarning:charms.loki_k8s.v1.loki_push_api",
+]
 
 [tool.codespell]
 skip = ".git,.tox,build,venv*"

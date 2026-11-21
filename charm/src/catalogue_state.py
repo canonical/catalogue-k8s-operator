@@ -293,7 +293,9 @@ def compute(
             return (Noop(),)
         case ContainerReady():
             return _compute_ready(state, intent)
-        case _ as unreachable:
+        case _ as unreachable:  # pragma: no cover — unreachable by
+            # construction: the union is closed and every member has an
+            # arm; pyright fails the build if that ever changes.
             assert_never(unreachable)
 
 
@@ -352,5 +354,7 @@ def status_without_intent(state: CatalogueState) -> CatalogueStatus:
             return StatusWaiting(reason=WAITING_FOR_PEBBLE_MESSAGE)
         case ContainerReady():
             return StatusActive()
-        case _ as unreachable:
+        case _ as unreachable:  # pragma: no cover — unreachable by
+            # construction: the union is closed and every member has an
+            # arm; pyright fails the build if that ever changes.
             assert_never(unreachable)

@@ -66,6 +66,16 @@ Introduce the decide/act split without changing observable behaviour.
   the container. Workload tests: the `ops.testing` container simulation.
 - Coverage gate (`fail_under`) added to `tox -e unit`.
 - Acceptance: no test of `charm.py` patches `Container` or Pebble directly.
+  **Done 2026-11-21** — Harness fully removed; all charm tests migrated to
+  Scenario with `ctx`/`base_state` fixtures in `conftest.py`; workload tests
+  landed at the `FakeContainer` constructor seam per the charm-testing skill
+  (the plan line said "the ops.testing container simulation" — the skill's
+  seam supersedes it, since Context does not expose a standalone simulated
+  container); coverage measures `src/` only per the skill, with
+  `fail_under = 90`; warnings-as-errors with vendored-only
+  ignores for `charms.tls_certificates_interface` and
+  `charms.loki_k8s.v1.loki_push_api`; `tox -e fmt,lint,static,unit,flaplint`
+  green.
 
 ## Stage 4 — Docs and decisions
 

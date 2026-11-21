@@ -207,7 +207,9 @@ class CatalogueCharm(CharmBase):
                 self._workload.restart(self.name)
             case catalogue_state.Noop():
                 logger.debug("converged: nothing to do.")
-            case _ as unreachable:
+            case _ as unreachable:  # pragma: no cover — unreachable by
+                # construction: the union is closed and every member has
+                # an arm; pyright fails the build if that ever changes.
                 assert_never(unreachable)
 
     # --- Status ---
@@ -236,7 +238,9 @@ class CatalogueCharm(CharmBase):
                 event.add_status(ActiveStatus(message) if message else ActiveStatus())
             case catalogue_state.StatusWaiting(reason=reason):
                 event.add_status(WaitingStatus(reason))
-            case _ as unreachable:
+            case _ as unreachable:  # pragma: no cover — unreachable by
+                # construction: the union is closed and every member has
+                # an arm; pyright fails the build if that ever changes.
                 assert_never(unreachable)
 
     # --- Properties ---
@@ -244,8 +248,6 @@ class CatalogueCharm(CharmBase):
     @property
     def items(self) -> Sequence[Mapping[str, object]]:
         """Applications to display in the catalogue."""
-        if not self._info:
-            return []
         return self._info.items
 
     @property
@@ -291,5 +293,6 @@ class CatalogueCharm(CharmBase):
         return bool(self._tls_config)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover — the Juju dispatcher
+    # executes this in the packed charm, not under pytest.
     main(CatalogueCharm)

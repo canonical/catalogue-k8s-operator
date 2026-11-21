@@ -1,34 +1,30 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
-#
-# Learn more about testing at: https://juju.is/docs/sdk/testing
+
+"""Unit tests for CatalogueCharm — Scenario-based (no Harness)."""
 
 import dataclasses
 import json
-import os
 import socket
-import unittest
-from unittest.mock import Mock, PropertyMock, patch
-from urllib.parse import urlparse
+from datetime import UTC, datetime
+from pathlib import Path
+from unittest.mock import PropertyMock, patch
 
 from charms.catalogue_k8s.v1.catalogue import DEFAULT_RELATION_NAME
-from charms.tls_certificates_interface.v4.tls_certificates import (
-    Certificate,
-    CertificateSigningRequest,
-)
-from ops.charm import ActionEvent
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import ConnectionError as PebbleConnectionError
-from ops.testing import Container, Context, Harness, State
+from ops.testing import Container, Context, Relation, State
+from scenario.state import Mount
 
 from catalogue_state import WAITING_FOR_PEBBLE_MESSAGE, TlsMaterial
 from charm import CatalogueCharm
-from nginx_config import NGINX_CONFIG_PATH
 from workload import ServiceNotRunningError
 
 CONTAINER_NAME = "catalogue"
-ROOT_PATH = "/web"
-CONFIG_PATH = ROOT_PATH + "/config.json"
 
 # The HTTP nginx config that intent_from produces when TLS is absent.
 EXPECTED_NGINX_HTTP = (
@@ -64,320 +60,338 @@ EXPECTED_NGINX_HTTP = (
     "\n"
 )
 
-EXPECTED_LAYER_SERVICES = {
-    "catalogue": {
-        "override": "replace",
-        "summary": "catalogue",
-        "command": f"nginx -g 'daemon off;' -c {NGINX_CONFIG_PATH}",
-        "startup": "enabled",
-    }
-}
+
+# --- Helpers ---
 
 
-class TestCharm(unittest.TestCase):
-    """Unit tests for CatalogueCharm with mocked Workload."""
+def _certificate_for_csr(csr_pem: str) -> tuple[str, str]:
+    """Build a leaf certificate for the CSR, signed by a fresh CA.
 
-    def setUp(self) -> None:
-        os.environ["JUJU_VERSION"] = "3.0.3"
+    The tls library generates its own key and CSR during the run, so
+    the test cannot pre-populate them — it reads the library's CSR
+    from the output relation data and certifies that.
 
-        # Patch Workload at module level so the charm gets a mock.
-        self.workload_patcher = patch("charm.Workload", autospec=True)
-        self.mock_workload_cls = self.workload_patcher.start()
-        self.mock_workload = self.mock_workload_cls.return_value
+    Returns:
+        (certificate_pem, ca_pem)
+    """
+    csr = x509.load_pem_x509_csr(csr_pem.encode())
+    ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "test-ca")])
+    ca_cert = (
+        x509.CertificateBuilder()
+        .subject_name(ca_name)
+        .issuer_name(ca_name)
+        .public_key(ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime(2026, 1, 1, tzinfo=UTC))
+        .not_valid_after(datetime(2027, 1, 1, tzinfo=UTC))
+        .sign(ca_key, hashes.SHA256())
+    )
+    leaf = (
+        x509.CertificateBuilder()
+        .subject_name(csr.subject)
+        .issuer_name(ca_name)
+        .public_key(csr.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime(2026, 1, 1, tzinfo=UTC))
+        .not_valid_after(datetime(2027, 1, 1, tzinfo=UTC))
+        .sign(ca_key, hashes.SHA256())
+    )
+    return (
+        leaf.public_bytes(serialization.Encoding.PEM).decode(),
+        ca_cert.public_bytes(serialization.Encoding.PEM).decode(),
+    )
 
-        # Default: container ready, nothing on disk — so the initial
-        # hooks will push everything (layer, configs) and converge.
-        self.mock_workload.can_connect.return_value = True
-        self.mock_workload.nginx_config.return_value = ""
-        self.mock_workload.catalogue_config.return_value = {}
-        self.mock_workload.layer_services.return_value = {}
-        self.mock_workload.certs.return_value = False
 
-        self.harness = Harness(CatalogueCharm)
-        self.harness.set_model_name("test-model")
-        self.addCleanup(self.harness.cleanup)
-        self.addCleanup(self.workload_patcher.stop)
-        self.harness.set_leader(True)
-        self.harness.begin_with_initial_hooks()
+def _relate_certificate(
+    ctx: Context[CatalogueCharm],
+    base: State,
+) -> tuple[State, str]:
+    """Run the two-phase tls flow; return (state, cert_pem).
 
-    # --- Helpers ---
+    Phase 1: relation_changed with an empty provider databag — the
+    tls library generates its own key and CSR and publishes the
+    request to the unit databag. Phase 2: the provider publishes a
+    certificate for that CSR; the library matches it, stores it as a
+    secret, and emits certificate_available, which routes through the
+    reconciler and pushes the cert to the container.
+    """
+    cert_relation = Relation(endpoint="certificates", remote_app_name="vault")
+    state_phase1 = dataclasses.replace(base, relations=[cert_relation])
+    state_out = ctx.run(ctx.on.relation_changed(cert_relation), state_phase1)
 
-    def _push_call_for(self, path: str) -> Mock | None:
-        """Find the most recent push call for a given path."""
-        for call in reversed(self.mock_workload.push.call_args_list):
-            if call.args[0] == path:
-                return call
-        return None
+    out_rel = next(r for r in state_out.relations if r.endpoint == "certificates")
+    requests = json.loads(out_rel.local_unit_data["certificate_signing_requests"])
+    csr_pem = requests[0]["certificate_signing_request"]
+    cert_pem, ca_pem = _certificate_for_csr(csr_pem)
+    provider_rel = Relation(
+        endpoint="certificates",
+        remote_app_name="vault",
+        remote_app_data={
+            "certificates": json.dumps(
+                [
+                    {
+                        "ca": ca_pem,
+                        "certificate_signing_request": csr_pem,
+                        "certificate": cert_pem,
+                        "chain": [],
+                        "revoked": False,
+                    }
+                ]
+            )
+        },
+        local_unit_data=dict(out_rel.local_unit_data),
+    )
+    state_phase2 = dataclasses.replace(state_out, relations=[provider_rel])
+    state_out = ctx.run(ctx.on.relation_changed(provider_rel), state_phase2)
+    return state_out, cert_pem
 
-    # --- Tests ---
 
-    def test_catalogue_pebble_ready(self) -> None:
-        """pebble_ready pushes layer, configs, and restarts nginx."""
-        # GIVEN a fresh container (mock returns empty state)
-        # WHEN pebble_ready fires (via begin_with_initial_hooks)
+# --- Funnel test ---
 
-        # THEN the layer was ensured
-        self.mock_workload.ensure_layer.assert_called()
-        layer_call = self.mock_workload.ensure_layer.call_args
-        assert layer_call is not None
-        assert layer_call.args[0] == "catalogue"
-        assert layer_call.args[1]["catalogue"]["startup"] == "enabled"
 
-        # THEN nginx was restarted
-        self.mock_workload.restart.assert_called_with("catalogue")
+def _reconcile_artifact(ctx: Context[CatalogueCharm], state_out: State) -> str:
+    """Assert and return the config.json only a reconcile can push.
 
-        # THEN the unit is active (via collect_unit_status)
-        self.harness.evaluate_status()
-        self.assertEqual(self.harness.model.unit.status, ActiveStatus())
+    The status collector reports Active for any connectable
+    container even when no reconcile ran, so status assertions
+    prove nothing about routing here; the pushed config does.
+    """
+    container_fs = state_out.get_container(CONTAINER_NAME).get_filesystem(ctx)
+    cfg_file = container_fs / "web" / "config.json"
+    assert cfg_file.exists(), "no reconcile artifact: config.json missing"
+    return cfg_file.read_text()
 
-    def test_reconfigure_applications(self) -> None:
-        """Adding a catalogue relation pushes the app to config.json."""
-        # GIVEN the catalogue and a remote charm
-        # WHEN a relation is established
-        rel_id = self.harness.add_relation(DEFAULT_RELATION_NAME, "rc")
-        self.harness.add_relation_unit(rel_id, "rc/0")
-        self.harness.update_relation_data(
-            rel_id,
-            "rc",
-            {
-                "name": "remote-charm",
-                "url": "https://localhost",
-                "icon": "some-cool-icon",
-            },
-        )
 
-        # THEN the catalogue config was pushed with the app entry
-        push_call = self._push_call_for(CONFIG_PATH)
-        assert push_call is not None, "Expected push to CONFIG_PATH"
-        body = json.loads(push_call.args[1])
-        apps = body.get("apps", [])
-        assert len(apps) == 1
-        assert apps[0]["name"] == "remote-charm"
-        assert apps[0]["url"] == "https://localhost"
-        assert apps[0]["icon"] == "some-cool-icon"
+def test_funnel_all_deferrable_events_to_reconcile(ctx: Context[CatalogueCharm]) -> None:
+    """Every deferrable event routes to the reconciler.
 
-    def test_api_type(self) -> None:
-        """Catalogue config includes api_docs and api_endpoints."""
-        # GIVEN a remote charm with api_docs and api_endpoints
-        apidocs = "some_url_to_upstream_docs"
-        apiendpoint = {"endpoint_1": "some_endpoint_1", "endpoint_2": "some_endpoint_2"}
-        rel_id = self.harness.add_relation(DEFAULT_RELATION_NAME, "rc")
-        self.harness.add_relation_unit(rel_id, "rc/0")
-        self.harness.update_relation_data(
-            rel_id,
-            "rc",
-            {
-                "name": "remote-charm",
-                "url": "https://localhost",
-                "icon": "some-cool-icon",
-                "api_docs": apidocs,
-                "api_endpoints": json.dumps(apiendpoint),
-            },
-        )
+    Each event fires against a fresh (empty) container, so the pushed
+    config.json is proof the reconcile ran: the collector cannot fake
+    it. Mocking `_reconcile` is not an option — ops checks
+    isinstance(observer, types.MethodType) at observe time.
+    """
+    container = Container(name="catalogue", can_connect=True)
+    base = State(leader=True, containers=[container])
 
-        # THEN the pushed config includes the api fields
-        push_call = self._push_call_for(CONFIG_PATH)
-        assert push_call is not None, "Expected push to CONFIG_PATH"
-        body = json.loads(push_call.args[1])
-        apps = body.get("apps", [])
-        assert len(apps) == 1
-        assert apps[0]["api_docs"] == apidocs
-        assert apps[0]["api_endpoints"] == apiendpoint
+    # -- config_changed --
+    state_out = ctx.run(ctx.on.config_changed(), base)
+    assert '"title"' in _reconcile_artifact(ctx, state_out)
 
-    def test_server_cert(self) -> None:
-        """_internal_url scheme reflects TLS availability."""
-        # GIVEN TLS available
-        patcher = patch.object(CatalogueCharm, "_tls_config", new_callable=PropertyMock)
-        mock_tls_config = patcher.start()
-        self.addCleanup(patcher.stop)
+    # -- pebble_ready --
+    state_out = ctx.run(ctx.on.pebble_ready(container), base)
+    _reconcile_artifact(ctx, state_out)
 
-        # WHEN TLS is available
-        mock_tls_config.return_value = TlsMaterial(
-            server_cert="cert", ca_cert="ca", private_key="key"
-        )
-        self.harness.charm.on.config_changed.emit()
-        self.harness.evaluate_status()
-        internal_url = urlparse(self.harness.charm._internal_url)
+    # -- upgrade_charm --
+    state_out = ctx.run(ctx.on.upgrade_charm(), base)
+    _reconcile_artifact(ctx, state_out)
 
-        # THEN the scheme is https
-        self.assertEqual(internal_url.scheme, "https")
-        self.assertEqual(internal_url.port, 443)
-        self.assertEqual(self.harness.model.unit.status, ActiveStatus())
+    # -- update_status --
+    state_out = ctx.run(ctx.on.update_status(), base)
+    _reconcile_artifact(ctx, state_out)
+
+    # -- leader_elected --
+    state_out = ctx.run(ctx.on.leader_elected(), base)
+    _reconcile_artifact(ctx, state_out)
+
+    # -- items_changed (catalogue relation): item reaches config --
+    cat_relation = Relation(
+        endpoint=DEFAULT_RELATION_NAME,
+        remote_app_name="rc",
+        remote_app_data={
+            "name": "remote-charm",
+            "url": "https://localhost",
+            "icon": "some-cool-icon",
+        },
+    )
+    state_cat = dataclasses.replace(base, relations=[cat_relation])
+    state_out = ctx.run(ctx.on.relation_changed(cat_relation), state_cat)
+    assert "remote-charm" in _reconcile_artifact(ctx, state_out)
+
+    # -- ingress ready --
+    ingress_relation = Relation(
+        endpoint="ingress",
+        remote_app_name="traefik",
+        remote_app_data={"ingress": json.dumps({"url": "https://testingress.com/sub"})},
+    )
+    state_ingress = dataclasses.replace(base, relations=[ingress_relation])
+    state_out = ctx.run(ctx.on.relation_changed(ingress_relation), state_ingress)
+    _reconcile_artifact(ctx, state_out)
+
+    # -- ingress revoked (relation from output state: same identity) --
+    out_ingress_rel = next(r for r in state_out.relations if r.endpoint == "ingress")
+    state_out = ctx.run(ctx.on.relation_broken(out_ingress_rel), state_out)
+    _reconcile_artifact(ctx, state_out)
+
+    # -- certificate_available: the cert lands on disk --
+    state_out, cert_pem = _relate_certificate(ctx, base)
+    container_fs = state_out.get_container(CONTAINER_NAME).get_filesystem(ctx)
+    cert_file = container_fs / "etc" / "catalogue" / "certs" / "catalogue.cert.pem"
+    assert cert_file.exists(), "no reconcile artifact: cert missing"
+    # The library normalises the PEM's trailing newline when storing.
+    assert cert_file.read_text().strip() == cert_pem.strip()
+
+
+def test_certificate_relation_removed_cleans_certs(
+    ctx: Context[CatalogueCharm],
+    tmp_path: Path,
+) -> None:
+    """Certs on disk with the TLS relation gone yields RemoveCerts.
+
+    Scenario does not persist the container filesystem between runs,
+    so the certs directory is a host-backed mount: the files the
+    reconciler pushes in one run are visible to the next, and their
+    removal is observable on the host.
+    """
+    # GIVEN a unit whose certificate was pushed by the reconciler
+    mount = Mount(location="/etc/catalogue/certs", source=tmp_path)
+    container = Container(name="catalogue", can_connect=True, mounts={"certs": mount})
+    base = State(leader=True, containers=[container])
+    state_out, _ = _relate_certificate(ctx, base)
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "ca.cert",
+        "catalogue.cert.pem",
+        "catalogue.key.pem",
+    ]
+
+    # WHEN the certificates relation is gone and a reconcile fires
+    state_no_tls = dataclasses.replace(state_out, relations=[])
+    state_out = ctx.run(ctx.on.config_changed(), state_no_tls)
+
+    # THEN the stale certs are removed from the container
+    assert list(tmp_path.iterdir()) == []
+
+
+# --- Action tests ---
+
+
+def test_get_url_action_no_ingress(ctx: Context[CatalogueCharm], base_state: State) -> None:
+    """get-url action returns the internal URL when no ingress."""
+    # GIVEN a running unit with no ingress relation
+    # WHEN the action runs
+    ctx.run(ctx.on.action("get-url"), base_state)
+
+    # THEN the result is the internal fqdn URL
+    assert ctx.action_results is not None
+    assert ctx.action_results["url"] == f"http://{socket.getfqdn()}:80"
+
+
+def test_get_url_action_ingress(ctx: Context[CatalogueCharm], base_state: State) -> None:
+    """get-url action returns the ingress URL when available."""
+    # GIVEN a running unit with an ingress relation providing a URL
+    ingress_relation = Relation(
+        endpoint="ingress",
+        remote_app_name="traefik",
+        remote_app_data={"ingress": json.dumps({"url": "https://endpoint/subpath"})},
+    )
+    state = dataclasses.replace(base_state, relations=[ingress_relation])
+
+    # WHEN the action runs
+    ctx.run(ctx.on.action("get-url"), state)
+
+    # THEN the result is the ingress URL
+    assert ctx.action_results is not None
+    assert ctx.action_results["url"] == "https://endpoint/subpath"
+
+
+# --- Config-push content tests ---
+
+
+def test_reconfigure_applications(ctx: Context[CatalogueCharm], base_state: State) -> None:
+    """Adding a catalogue relation pushes the app to config.json."""
+    # GIVEN a catalogue relation with a remote charm
+    cat_relation = Relation(
+        endpoint=DEFAULT_RELATION_NAME,
+        remote_app_name="rc",
+        remote_app_data={
+            "name": "remote-charm",
+            "url": "https://localhost",
+            "icon": "some-cool-icon",
+        },
+    )
+    state = dataclasses.replace(base_state, relations=[cat_relation])
+
+    # WHEN relation-changed fires
+    state_out = ctx.run(ctx.on.relation_changed(cat_relation), state)
+
+    # THEN the catalogue config was pushed with the app entry
+    container_fs = state_out.get_container(CONTAINER_NAME).get_filesystem(ctx)
+    cfg_file = container_fs / "web" / "config.json"
+    body = json.loads(cfg_file.read_text())
+    apps = body.get("apps", [])
+    assert len(apps) == 1
+    assert apps[0]["name"] == "remote-charm"
+    assert apps[0]["url"] == "https://localhost"
+    assert apps[0]["icon"] == "some-cool-icon"
+
+
+def test_api_type(ctx: Context[CatalogueCharm], base_state: State) -> None:
+    """Catalogue config includes api_docs and api_endpoints."""
+    # GIVEN a remote charm with api_docs and api_endpoints
+    apidocs = "some_url_to_upstream_docs"
+    apiendpoint = {"endpoint_1": "some_endpoint_1", "endpoint_2": "some_endpoint_2"}
+    cat_relation = Relation(
+        endpoint=DEFAULT_RELATION_NAME,
+        remote_app_name="rc",
+        remote_app_data={
+            "name": "remote-charm",
+            "url": "https://localhost",
+            "icon": "some-cool-icon",
+            "api_docs": apidocs,
+            "api_endpoints": json.dumps(apiendpoint),
+        },
+    )
+    state = dataclasses.replace(base_state, relations=[cat_relation])
+
+    # WHEN relation-changed fires
+    state_out = ctx.run(ctx.on.relation_changed(cat_relation), state)
+
+    # THEN the pushed config includes the api fields
+    container_fs = state_out.get_container(CONTAINER_NAME).get_filesystem(ctx)
+    cfg_file = container_fs / "web" / "config.json"
+    body = json.loads(cfg_file.read_text())
+    apps = body.get("apps", [])
+    assert len(apps) == 1
+    assert apps[0]["api_docs"] == apidocs
+    assert apps[0]["api_endpoints"] == apiendpoint
+
+
+# --- TLS / server cert test ---
+
+
+def test_server_cert(ctx: Context[CatalogueCharm], base_state: State) -> None:
+    """_internal_url scheme reflects TLS availability."""
+    # GIVEN TLS available
+    with patch.object(CatalogueCharm, "_tls_config", new_callable=PropertyMock) as mock_tls:
+        mock_tls.return_value = TlsMaterial(server_cert="cert", ca_cert="ca", private_key="key")
+
+        # WHEN config_changed fires
+        state_out = ctx.run(ctx.on.config_changed(), base_state)
+
+        # THEN the unit is active and the nginx config is HTTPS
+        assert state_out.unit_status == ActiveStatus()
+        container_fs = state_out.get_container(CONTAINER_NAME).get_filesystem(ctx)
+        nginx_conf = container_fs / "etc" / "nginx" / "nginx.conf"
+        content = nginx_conf.read_text()
+        assert "listen               443 ssl" in content
+        assert "ssl_certificate" in content
 
         # WHEN TLS is not available
-        mock_tls_config.return_value = None
-        self.harness.charm.on.config_changed.emit()
-        self.harness.evaluate_status()
+        mock_tls.return_value = None
+        state_out2 = ctx.run(ctx.on.config_changed(), state_out)
 
-        # THEN the scheme is http
-        internal_url = urlparse(self.harness.charm._internal_url)
-        self.assertEqual(internal_url.scheme, "http")
-        self.assertEqual(internal_url.port, 80)
-
-    def test_funnel_all_deferrable_events_to_reconcile(self) -> None:
-        """Every deferrable event routes to _reconcile exactly once."""
-        # GIVEN a charm with _reconcile mocked
-        with patch.object(CatalogueCharm, "_reconcile") as mock_reconcile:
-            container = self.harness.model.unit.get_container("catalogue")
-
-            # Add an ingress relation so ingress events have a real
-            # relation.
-            ingress_rel_id = self.harness.add_relation("ingress", "traefik")
-            self.harness.add_relation_unit(ingress_rel_id, "traefik/0")
-            ingress_relation = self.harness.charm.model.get_relation("ingress", ingress_rel_id)
-            assert ingress_relation is not None
-
-            # WHEN each deferrable event fires
-            self.harness.charm.on.catalogue_pebble_ready.emit(workload=container)
-            assert mock_reconcile.call_count == 1
-            mock_reconcile.reset_mock()
-
-            self.harness.charm.on.config_changed.emit()
-            assert mock_reconcile.call_count == 1
-            mock_reconcile.reset_mock()
-
-            self.harness.charm.on.upgrade_charm.emit()
-            assert mock_reconcile.call_count == 1
-            mock_reconcile.reset_mock()
-
-            self.harness.charm.on.update_status.emit()
-            assert mock_reconcile.call_count == 1
-            mock_reconcile.reset_mock()
-
-            self.harness.charm.on.leader_elected.emit()
-            assert mock_reconcile.call_count == 1
-            mock_reconcile.reset_mock()
-
-            self.harness.charm._info.on.items_changed.emit(items=[])
-            assert mock_reconcile.call_count == 1
-            mock_reconcile.reset_mock()
-
-            self.harness.charm._ingress.on.ready.emit(ingress_relation, "https://testingress.com")
-            assert mock_reconcile.call_count == 1
-            mock_reconcile.reset_mock()
-
-            self.harness.charm._ingress.on.revoked.emit(ingress_relation)
-            assert mock_reconcile.call_count == 1
-            mock_reconcile.reset_mock()
-
-            # certificate_available requires real Certificate objects
-            # (the event snapshot/restore round-trips through PEM).
-            test_cert_pem = (
-                "-----BEGIN CERTIFICATE-----\n"
-                "MIICqjCCAZKgAwIBAgIUDjC3aJdOM1vHwNAm7ERFxdgdaZ8wDQYJKoZIhvcNAQEL\n"
-                "BQAwDzENMAsGA1UEAwwEdGVzdDAeFw0yNjExMjEwMjAyMTJaFw0yNjExMjIwMjAy\n"
-                "MTJaMA8xDTALBgNVBAMMBHRlc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK\n"
-                "AoIBAQC6PQnIInno2ACyeJySZ+26+xlnA//sxan8VVZ44FgbnSmiODJ33qAiUIGJ\n"
-                "4laubprqk5OURpzQkfyTU+0cleSy7iuwzBbBxPfUnC6uwIcd8ob2Jt0QYq1WFVUf\n"
-                "XQoRMRFckEgIbP9fhoZws3SXwx8rc2MvhehCUeF7X79UgUSNSl1GhoOyXuE9bO4l\n"
-                "0fLtr82119axfqpIAQzmc0/8b1cOoaUVTUlj74YABcP+F89jlk//yu+7MBhCTprj\n"
-                "eJKUm5oOF/8HyKhRvqdWkFkSdjXPmjRAcA8igQmCR/fQJZbdujkjhSf2TB8Cy5cG\n"
-                "lRoG61V9v5cQIXcPZ/qvBwhWwypDAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAF5a\n"
-                "wO91j/ch42XGmGCOrjwCLIy1qhdCXJMPRNsC6edLEhuwe+pZL90VKAdlbQC6g/mK\n"
-                "dP6824g1yvLfJ7iYWYN8fIrIWbQdg62Vdlby1jJARgS/2R5FDmtRgs7M1dL6Uxuo\n"
-                "crNiASzYvt1FBJAU1hN5KQzJDVEVrJFx/PmnAfseob4FmcxIXZkJQjDTyIVfZawY\n"
-                "LXu61w2z39JUH1bOQuNHR/xIxx8+D0Ba/Jjh5icBrsG05CDRz2RZiv0wijb10IgT\n"
-                "yXNPOMyDsgExh0XtPKy4EMjcHueVM8SJvm68NrPRjCTpUmxt/3Jdr1fa+5rAMpkX\n"
-                "TxTGJtp+dRK+8BK4C/U=\n"
-                "-----END CERTIFICATE-----"
-            )
-            test_csr_pem = (
-                "-----BEGIN CERTIFICATE REQUEST-----\n"
-                "MIICVDCCATwCAQAwDzENMAsGA1UEAwwEdGVzdDCCASIwDQYJKoZIhvcNAQEBBQAD\n"
-                "ggEPADCCAQoCggEBAJKiQF2A3/+NNMvZa2lo3+yAFheyP6epZXnEmlM2SVkLaz6W\n"
-                "3aLWMm3XLWZ1M/rLt8hZZ/8toNmjSxCI/K33NuGwWYdDK0QO0cKY6xAzn07lSyCU\n"
-                "anq1Tv+xqoqam0GFGuJ7of1zEcbDMBtsWLfZuGN/ALnGgJW4y4VcyXPnlaQ1KJsw\n"
-                "MN3f9Ly78D0UCuln1oiIDHeFOl2t32zSBV4wYGKgVqo7VsYz7+zhCA7iJOEDrahz\n"
-                "PYTf/E1+sDfYA+NaF9BDZ9aQ4KjALBy9/hW4kF3epnvwk6TlEYFrevypN0yMspd0\n"
-                "pjpE2HEV3QfXUDZ+E2xjfsiSM5Plg8+iPPpbH8UCAwEAAaAAMA0GCSqGSIb3DQEB\n"
-                "CwUAA4IBAQBN5jHsEkpslc/YJiPHGJrjtHtsX++7aHvTJmzeeUQcTuPKV8Rp4Vt5\n"
-                "aesqj1GqQykI/HTAenGeks1Y+d4dBmdZ7wSSHkOF0UxSuRKd0mRCp6IaetFW8UK6\n"
-                "46wtGQ2GQA7NUJLDsStifrhyyGpCMNKAU3VWlic3nVvTVnw9XO1J67P2LBo4nmUq\n"
-                "ysormhzGH6f+dZ+U3/Xizjpzrsim9M82Ug/RxB/v21P0qqen17RNddiUelBu7Wk8\n"
-                "0H0BzkbkCHvt2v0nFN5BW3S6+yO/N7Sso7raZQXC8LoMnXZ3WaOLEySIWFUzthw/\n"
-                "guiV7jilnvgSBlDYFxfuGIT18iGje++E\n"
-                "-----END CERTIFICATE REQUEST-----"
-            )
-            test_cert = Certificate.from_string(test_cert_pem)
-            test_csr = CertificateSigningRequest.from_string(test_csr_pem)
-            self.harness.charm._cert_requirer.on.certificate_available.emit(
-                certificate=test_cert,
-                certificate_signing_request=test_csr,
-                ca=test_cert,
-                chain=[],
-            )
-            assert mock_reconcile.call_count == 1
-
-    def test_ingress(self) -> None:
-        """Ingress events route through the reconciler."""
-        # GIVEN a catalogue relation with items
-        rel_id = self.harness.add_relation(DEFAULT_RELATION_NAME, "rc")
-        self.harness.add_relation_unit(rel_id, "rc/0")
-        self.harness.update_relation_data(
-            rel_id,
-            "rc",
-            {
-                "name": "remote-charm",
-                "url": "https://localhost",
-                "icon": "some-cool-icon",
-            },
-        )
-
-        # Reset mock to clear initial-hooks calls
-        self.mock_workload.push.reset_mock()
-
-        # Add an ingress relation so the ingress event has a real
-        # relation.
-        ingress_rel_id = self.harness.add_relation("ingress", "traefik")
-        self.harness.add_relation_unit(ingress_rel_id, "traefik/0")
-        ingress_relation = self.harness.charm.model.get_relation("ingress", ingress_rel_id)
-        assert ingress_relation is not None
-
-        # WHEN ingress ready fires
-        self.harness.charm._ingress.on.ready.emit(ingress_relation, "https://testingress.com")
-
-        # THEN the catalogue config was pushed with the app entry
-        push_call = self._push_call_for(CONFIG_PATH)
-        assert push_call is not None, "Expected push to CONFIG_PATH"
-        body = json.loads(push_call.args[1])
-        apps = body.get("apps", [])
-        assert len(apps) == 1
-        assert apps[0]["name"] == "remote-charm"
-
-        # Reset and test ingress revoked
-        self.mock_workload.push.reset_mock()
-        self.harness.charm._ingress.on.revoked.emit(ingress_relation)
-
-        # THEN the reconciler still runs (items still pushed)
-        push_call = self._push_call_for(CONFIG_PATH)
-        assert push_call is not None, "Expected push to CONFIG_PATH after revoke"
-
-    def test_get_url_action_no_ingress(self) -> None:
-        """get-url action returns the internal URL when no ingress."""
-        action_event = Mock(spec=ActionEvent)
-        self.harness.charm._get_url(action_event)
-        action_event.set_results.assert_called_once_with({"url": f"http://{socket.getfqdn()}:80"})
-
-    @patch("ops.model.Model.get_binding", lambda *_: None)  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
-    def test_get_url_action_ingress(self) -> None:
-        """get-url action returns the ingress URL when available."""
-        rel_id = self.harness.add_relation("ingress", "remote")
-        self.harness.add_relation_unit(rel_id, "remote/0")
-        self.harness.update_relation_data(
-            rel_id,
-            "remote",
-            {"ingress": json.dumps({"url": "https://endpoint/subpath"})},
-        )
-
-        action_event = Mock(spec=ActionEvent)
-        self.harness.charm._get_url(action_event)
-        action_event.set_results.assert_called_once_with({"url": "https://endpoint/subpath"})
+        # THEN the nginx config is HTTP
+        container_fs2 = state_out2.get_container(CONTAINER_NAME).get_filesystem(ctx)
+        nginx_conf2 = container_fs2 / "etc" / "nginx" / "nginx.conf"
+        content2 = nginx_conf2.read_text()
+        assert "listen               80" in content2
+        assert "ssl_certificate" not in content2
 
 
-# --- Scenario-based tests ---
+# --- Existing Scenario tests (kept, adapted to fixtures) ---
 
 
-def test_workload_failure_yields_blocked() -> None:
+def test_workload_failure_yields_blocked(ctx: Context[CatalogueCharm]) -> None:
     """A workload failure during reconcile yields BlockedStatus."""
     # GIVEN a container with a stale config so compute yields
     # RestartNginx, and a workload whose restart raises
@@ -388,8 +402,6 @@ def test_workload_failure_yields_blocked() -> None:
         containers=[container],
         config={"title": "Test"},
     )
-
-    ctx = Context(CatalogueCharm)
 
     # Push initial config so the running state exists.
     state_out = ctx.run(ctx.on.config_changed(), state)
@@ -410,7 +422,7 @@ def test_workload_failure_yields_blocked() -> None:
         assert "pebble services" in state_out.unit_status.message
 
 
-def test_container_not_connectable_yields_waiting() -> None:
+def test_container_not_connectable_yields_waiting(ctx: Context[CatalogueCharm]) -> None:
     """When the container is not connectable, status is Waiting."""
     # GIVEN a container whose Pebble API is not reachable
     container = Container(name="catalogue", can_connect=False)
@@ -420,14 +432,13 @@ def test_container_not_connectable_yields_waiting() -> None:
     )
 
     # WHEN config_changed fires
-    context = Context(CatalogueCharm)
-    state_out = context.run(context.on.config_changed(), state)
+    state_out = ctx.run(ctx.on.config_changed(), state)
 
     # THEN the unit reports Waiting for Pebble ready
     assert state_out.unit_status == WaitingStatus(WAITING_FOR_PEBBLE_MESSAGE)
 
 
-def test_collector_pebble_drop_yields_waiting() -> None:
+def test_collector_pebble_drop_yields_waiting(ctx: Context[CatalogueCharm]) -> None:
     """A Pebble drop between reconcile and collect is Waiting.
 
     can_connect() is point-in-time: the socket can drop between the
@@ -441,7 +452,6 @@ def test_collector_pebble_drop_yields_waiting() -> None:
         containers=[container],
         config={"title": "Test"},
     )
-    ctx = Context(CatalogueCharm)
 
     with patch("charm.Workload.nginx_config") as mock_nginx:
         # First fetch (inside _reconcile) answers with the expected
@@ -459,3 +469,46 @@ def test_collector_pebble_drop_yields_waiting() -> None:
 
     # THEN the unit reports Waiting, not an error state
     assert state_out.unit_status == WaitingStatus(WAITING_FOR_PEBBLE_MESSAGE)
+
+
+def test_ingress(ctx: Context[CatalogueCharm], base_state: State) -> None:
+    """Ingress events route through the reconciler."""
+    # GIVEN a catalogue relation with items
+    cat_relation = Relation(
+        endpoint=DEFAULT_RELATION_NAME,
+        remote_app_name="rc",
+        remote_app_data={
+            "name": "remote-charm",
+            "url": "https://localhost",
+            "icon": "some-cool-icon",
+        },
+    )
+    ingress_relation = Relation(
+        endpoint="ingress",
+        remote_app_name="traefik",
+        remote_app_data={"ingress": json.dumps({"url": "https://testingress.com/sub"})},
+    )
+    state = dataclasses.replace(base_state, relations=[cat_relation, ingress_relation])
+
+    # WHEN ingress relation-changed fires (triggers ready)
+    state_out = ctx.run(ctx.on.relation_changed(ingress_relation), state)
+
+    # THEN the catalogue config was pushed with the app entry
+    container_fs = state_out.get_container(CONTAINER_NAME).get_filesystem(ctx)
+    cfg_file = container_fs / "web" / "config.json"
+    body = json.loads(cfg_file.read_text())
+    apps = body.get("apps", [])
+    assert len(apps) == 1
+    assert apps[0]["name"] == "remote-charm"
+
+    # WHEN ingress relation-broken fires (triggers revoked)
+    # Must use the relation from the output state (same identity).
+    out_ingress_rel = next(r for r in state_out.relations if r.endpoint == "ingress")
+    state_out2 = ctx.run(ctx.on.relation_broken(out_ingress_rel), state_out)
+
+    # THEN the reconciler still runs (items still pushed)
+    container_fs2 = state_out2.get_container(CONTAINER_NAME).get_filesystem(ctx)
+    cfg_file2 = container_fs2 / "web" / "config.json"
+    body2 = json.loads(cfg_file2.read_text())
+    apps2 = body2.get("apps", [])
+    assert len(apps2) == 1

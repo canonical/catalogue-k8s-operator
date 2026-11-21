@@ -27,8 +27,8 @@ builds intent, fetches running state via the `Workload` module, computes
 outcomes purely in `catalogue_state.py`, and applies them. Status is
 reported by `_on_collect_status` (observed for both `collect_unit_status`
 and `collect_app_status`). The decide/act split landed 2026-11-21 (stage 1);
-the single-reconciler collapse landed 2026-11-21 (stage 2). Not yet true:
-the test-layer split (stage 3) and the docs/ADRs (stage 4).
+the single-reconciler collapse landed 2026-11-21 (stage 2); the test-layer
+split landed 2026-11-21 (stage 3). Not yet true: the docs/ADRs (stage 4).
 
 The public interface — relations, config options, the `get-url` action — is
 what `charmcraft.yaml` declares; that YAML is the list, and this file
@@ -63,11 +63,12 @@ review.
    sits between them as the pure core and imports neither `ops` nor the
    workload; it reaches the container only through a `Facts` protocol.
    `src/nginx_config.py` renders nginx config and is already pure — it must
-   stay that way. This is what makes unit tests possible: tests of `charm.py`
-   mock the workload module, never the container. No linter checks this; if a
-   test of `charm.py` patches `Container` or Pebble calls directly, the
-   boundary has already broken. (Workload tests exercise the container
-   simulation — that is their job.)
+    stay that way. This is what makes unit tests possible: tests of `charm.py`
+    mock the workload module, never the container. No linter checks this; if a
+    test of `charm.py` patches `Container` or Pebble calls directly, the
+    boundary has already broken. (Workload tests fake the container at the
+    constructor seam — a fake that lies the way Pebble lies; that is their
+    job.)
 3. **No imports inside functions.** PEP 8 already says imports go at the top of
    the file; the reason it is restated here as absolute is charm-specific. A Juju
    hook runs once and exits, so an import inside a rarely-taken branch fails in

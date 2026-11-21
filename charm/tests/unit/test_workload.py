@@ -2,13 +2,14 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Tests for workload.py using mock containers (constructor seam)."""
+"""Tests for workload.py with a FakeContainer at constructor seam."""
 
 import json
 from collections.abc import Mapping
-from unittest.mock import MagicMock
+from typing import Any, cast
 
 import pytest
+from ops.model import Container
 from ops.pebble import PathError, ServiceInfo, ServiceStatus
 
 from nginx_config import CA_CERT_PATH, CERT_PATH, KEY_PATH, NGINX_CONFIG_PATH
@@ -19,74 +20,161 @@ ROOT_PATH = "/web"
 CONFIG_PATH = ROOT_PATH + "/config.json"
 
 
-# --- Helpers ---
+def _make_service_info(name: str, status: ServiceStatus) -> ServiceInfo:
+    """Build a ServiceInfo-like object with the given status."""
+
+    class _FakeServiceInfo:
+        def is_running(self) -> bool:
+            return status == ServiceStatus.ACTIVE
+
+        @property
+        def current(self) -> ServiceStatus:
+            return status
+
+        @property
+        def name(self) -> str:
+            return name
+
+    # The cast is the annotated seam: the fake models ServiceInfo's
+    # behaviour without subclassing the ops class.
+    return cast("ServiceInfo", _FakeServiceInfo())
 
 
-def _make_container(
-    can_connect: bool = True,
-    files: dict[str, str] | None = None,
-    services: Mapping[str, ServiceInfo] | None = None,
-) -> MagicMock:
-    """Build a mock Container with configurable state."""
-    mock = MagicMock()
-    mock.can_connect.return_value = can_connect
-    mock.name = CONTAINER_NAME
+def _workload(fake: FakeContainer) -> Workload:
+    """Build a Workload over the fake container.
 
-    # File operations
-    stored_files: dict[str, str] = dict(files) if files else {}
+    The cast is the one annotated seam: FakeContainer models the
+    container's behaviour without being an ops.model.Container.
+    """
+    return Workload(cast("Container", fake))
 
-    def _push(path: str, source: str, *, make_dirs: bool = False) -> None:
-        stored_files[path] = source
 
-    def _pull(path: str, *, encoding: str = "utf-8") -> MagicMock:
-        if path not in stored_files:
-            # Pebble raises PathError("not-found") from pull, not
-            # the builtin FileNotFoundError — the mock lies like
-            # the real API.
+# --- FakeContainer ---
+
+
+class FakeContainer:
+    """A fake ops.model.Container that lies the way Pebble lies.
+
+    Maintains a files dict, a services dict, and a plan dict so that
+    read-back verification (non-negotiable #6) is tested directly:
+    restart() returning is not evidence the service runs; a pull that
+    returns yesterday's config after a push is a real failure mode.
+    """
+
+    def __init__(
+        self,
+        *,
+        can_connect: bool = True,
+        files: dict[str, str] | None = None,
+        services: Mapping[str, ServiceStatus] | None = None,
+    ) -> None:
+        """Initialise with configurable state.
+
+        Args:
+            can_connect: Whether the Pebble API is reachable.
+            files: Initial filesystem contents (path -> content).
+            services: Initial service statuses (name -> ServiceStatus).
+        """
+        self._can_connect = can_connect
+        self.name = CONTAINER_NAME
+        self.files: dict[str, str] = dict(files) if files else {}
+        self._services: dict[str, ServiceStatus] = dict(services) if services else {}
+        self._layers: dict[str, dict[str, Any]] = {}
+        self._plan_services: dict[str, dict[str, Any]] = {}
+
+        # Call records for assertions.
+        self.restart_calls: list[str] = []
+        self.add_layer_calls: list[tuple[str, dict[str, Any], bool]] = []
+        self.autostart_calls: list[tuple[()]] = []
+        self.remove_path_calls: list[tuple[str, bool]] = []
+
+    # -- Pebble API --
+
+    def can_connect(self) -> bool:
+        """Whether the Pebble API is reachable (point-in-time)."""
+        return self._can_connect
+
+    def push(self, path: str, source: str, *, make_dirs: bool = False) -> None:
+        """Push a file to the container."""
+        self.files[path] = source
+
+    def pull(self, path: str, *, encoding: str = "utf-8") -> Any:  # noqa: ANN401
+        """Pull a file from the container.
+
+        Raises PathError("not-found") when the file does not exist,
+        matching the real Pebble API.
+        """
+        if path not in self.files:
             raise PathError("not-found", f"stat {path}: no such file or directory")
-        m = MagicMock()
-        m.read.return_value = stored_files[path]
-        m.__enter__ = MagicMock(return_value=m)
-        m.__exit__ = MagicMock(return_value=None)
-        return m
 
-    def _exists(path: str) -> bool:
-        return path in stored_files
+        class _File:
+            def __init__(self, content: str) -> None:
+                self._content = content
 
-    mock.push.side_effect = _push
-    mock.pull.side_effect = _pull
-    mock.exists.side_effect = _exists
-    mock.remove_path = MagicMock()
+            def read(self) -> str:
+                return self._content
 
-    # Service operations
-    _services: dict[str, ServiceInfo] = {}
-    if services:
-        _services = dict(services)
+            def __enter__(self) -> _File:
+                return self
 
-    def _get_services(*names: str) -> dict[str, ServiceInfo]:
-        if not names:
-            return dict(_services)
-        return {n: _services[n] for n in names if n in _services}
+            def __exit__(self, *args: object) -> None:
+                pass
 
-    mock.get_services.side_effect = _get_services
-    mock.restart = MagicMock()
-    mock.add_layer = MagicMock()
-    mock.autostart = MagicMock()
-    mock.get_plan = MagicMock()
+        return _File(self.files[path])
 
-    return mock
+    def exists(self, path: str) -> bool:
+        """Whether a path exists in the container."""
+        return path in self.files
 
+    def remove_path(self, path: str, *, recursive: bool = False) -> None:
+        """Remove a path from the container."""
+        self.remove_path_calls.append((path, recursive))
+        self.files.pop(path, None)
 
-def _make_service_info(
-    name: str = "catalogue",
-    current: ServiceStatus = ServiceStatus.ACTIVE,
-) -> ServiceInfo:
-    """Build a ServiceInfo with the given current status."""
-    info = MagicMock(spec=ServiceInfo)
-    info.is_running.return_value = current == ServiceStatus.ACTIVE
-    info.current = current
-    info.name = name
-    return info
+    def get_services(self, *names: str) -> dict[str, ServiceInfo]:
+        """Get service statuses.
+
+        Returns ServiceInfo-like objects whose is_running() reflects
+        the configured status.
+        """
+        result: dict[str, ServiceInfo] = {}
+        targets = set(names) if names else set(self._services.keys())
+        for name in targets:
+            svc_status = self._services.get(name, ServiceStatus.INACTIVE)
+            result[name] = _make_service_info(name, svc_status)
+        return result
+
+    def restart(self, service: str) -> None:
+        """Record a restart call."""
+        self.restart_calls.append(service)
+
+    def add_layer(self, label: str, layer: dict[str, Any], *, combine: bool = False) -> None:
+        """Add a Pebble layer."""
+        self.add_layer_calls.append((label, layer, combine))
+        self._layers[label] = layer
+        # Merge services into the plan.
+        if "services" in layer:
+            self._plan_services.update(layer["services"])
+
+    def autostart(self) -> None:
+        """Record an autostart call."""
+        self.autostart_calls.append(())
+
+    def get_plan(self) -> Any:  # noqa: ANN401
+        """Return a plan-like object with the current services."""
+
+        class _FakePlan:
+            def __init__(self, services: dict[str, Any]) -> None:
+                self.services: dict[str, Any] = {}
+                for svc_name, svc_data in services.items():
+
+                    class _FakeService:
+                        def to_dict(self, _data: dict[str, Any] = svc_data) -> dict[str, Any]:
+                            return dict(_data)
+
+                    self.services[svc_name] = _FakeService()
+
+        return _FakePlan(self._plan_services)
 
 
 # --- Facts tests ---
@@ -95,8 +183,8 @@ def _make_service_info(
 def test_can_connect_true() -> None:
     """can_connect returns True when the container is reachable."""
     # GIVEN a connected container
-    container = _make_container(can_connect=True)
-    wl = Workload(container)
+    fake = FakeContainer(can_connect=True)
+    wl = _workload(fake)
 
     # WHEN can_connect is called
     result = wl.can_connect()
@@ -108,8 +196,8 @@ def test_can_connect_true() -> None:
 def test_can_connect_false() -> None:
     """can_connect returns False when the container is not reachable."""
     # GIVEN a disconnected container
-    container = _make_container(can_connect=False)
-    wl = Workload(container)
+    fake = FakeContainer(can_connect=False)
+    wl = _workload(fake)
 
     # WHEN can_connect is called
     result = wl.can_connect()
@@ -121,8 +209,8 @@ def test_can_connect_false() -> None:
 def test_nginx_config_returns_content() -> None:
     """nginx_config reads the on-disk nginx config."""
     # GIVEN a container with a pushed nginx config
-    container = _make_container(files={NGINX_CONFIG_PATH: "test-nginx-config"})
-    wl = Workload(container)
+    fake = FakeContainer(files={NGINX_CONFIG_PATH: "test-nginx-config"})
+    wl = _workload(fake)
 
     # WHEN the config is read
     result = wl.nginx_config()
@@ -134,8 +222,8 @@ def test_nginx_config_returns_content() -> None:
 def test_nginx_config_returns_empty_on_missing() -> None:
     """nginx_config returns '' when the file does not exist."""
     # GIVEN a container with no nginx config
-    container = _make_container()
-    wl = Workload(container)
+    fake = FakeContainer()
+    wl = _workload(fake)
 
     # WHEN the config is read
     result = wl.nginx_config()
@@ -148,8 +236,8 @@ def test_catalogue_config_returns_content() -> None:
     """catalogue_config reads and parses the on-disk config.json."""
     # GIVEN a container with a pushed catalogue config
     expected: dict[str, object] = {"title": "Test", "apps": []}
-    container = _make_container(files={CONFIG_PATH: json.dumps(expected)})
-    wl = Workload(container)
+    fake = FakeContainer(files={CONFIG_PATH: json.dumps(expected)})
+    wl = _workload(fake)
 
     # WHEN the config is read
     result = wl.catalogue_config()
@@ -161,8 +249,8 @@ def test_catalogue_config_returns_content() -> None:
 def test_catalogue_config_returns_empty_on_missing() -> None:
     """catalogue_config returns {} when the file does not exist."""
     # GIVEN a container with no catalogue config
-    container = _make_container()
-    wl = Workload(container)
+    fake = FakeContainer()
+    wl = _workload(fake)
 
     # WHEN the config is read
     result = wl.catalogue_config()
@@ -178,8 +266,8 @@ def test_catalogue_config_returns_empty_on_corrupt_json() -> None:
     so the reconcile re-pushes it.
     """
     # GIVEN a container with a corrupt catalogue config
-    container = _make_container(files={CONFIG_PATH: "not-json{"})
-    wl = Workload(container)
+    fake = FakeContainer(files={CONFIG_PATH: "not-json{"})
+    wl = _workload(fake)
 
     # WHEN the config is read
     result = wl.catalogue_config()
@@ -188,21 +276,42 @@ def test_catalogue_config_returns_empty_on_corrupt_json() -> None:
     assert result == {}
 
 
+def test_catalogue_config_returns_empty_on_non_mapping_json() -> None:
+    """catalogue_config returns {} for valid JSON that is not an object.
+
+    A JSON list in config.json is as corrupt as invalid JSON: {}
+    compares unequal to intent, so the reconcile re-pushes it.
+    """
+    # GIVEN a container whose config.json is a JSON list
+    fake = FakeContainer(files={CONFIG_PATH: "[1, 2]"})
+    wl = _workload(fake)
+
+    # WHEN the config is read
+    result = wl.catalogue_config()
+
+    # THEN an empty dict is returned
+    assert result == {}
+
+
 def test_layer_services_returns_plan() -> None:
     """layer_services reads the running Pebble plan services."""
     # GIVEN a container with a plan
-    container = _make_container()
-    plan_mock = MagicMock()
-    svc_mock = MagicMock()
-    svc_mock.to_dict.return_value = {
-        "override": "replace",
-        "summary": "catalogue",
-        "command": "nginx",
-        "startup": "enabled",
-    }
-    plan_mock.services = {"catalogue": svc_mock}
-    container.get_plan.return_value = plan_mock
-    wl = Workload(container)
+    fake = FakeContainer()
+    # Pre-populate the plan via add_layer so get_plan returns it.
+    fake.add_layer(
+        "catalogue",
+        {
+            "services": {
+                "catalogue": {
+                    "override": "replace",
+                    "summary": "catalogue",
+                    "command": "nginx",
+                    "startup": "enabled",
+                }
+            }
+        },
+    )
+    wl = _workload(fake)
 
     # WHEN the layer services are read
     result = wl.layer_services()
@@ -215,14 +324,14 @@ def test_layer_services_returns_plan() -> None:
 def test_certs_true_when_all_exist() -> None:
     """Certs returns True when all three cert files exist."""
     # GIVEN a container with all three cert files
-    container = _make_container(
+    fake = FakeContainer(
         files={
             CERT_PATH: "cert",
             KEY_PATH: "key",
             CA_CERT_PATH: "ca",
         }
     )
-    wl = Workload(container)
+    wl = _workload(fake)
 
     # WHEN certs are checked
     result = wl.certs()
@@ -234,14 +343,14 @@ def test_certs_true_when_all_exist() -> None:
 def test_certs_false_when_one_missing() -> None:
     """Certs returns False when any cert file is missing."""
     # GIVEN a container with only two of three cert files
-    container = _make_container(
+    fake = FakeContainer(
         files={
             CERT_PATH: "cert",
             KEY_PATH: "key",
             # CA_CERT_PATH is missing
         }
     )
-    wl = Workload(container)
+    wl = _workload(fake)
 
     # WHEN certs are checked
     result = wl.certs()
@@ -256,36 +365,36 @@ def test_certs_false_when_one_missing() -> None:
 def test_push_writes_file() -> None:
     """Push writes a file to the container."""
     # GIVEN a container
-    container = _make_container()
-    wl = Workload(container)
+    fake = FakeContainer()
+    wl = _workload(fake)
 
     # WHEN a file is pushed
     wl.push("/tmp/test.txt", "hello world", make_dirs=True)
 
-    # THEN push was called with the right arguments
-    container.push.assert_called_once_with("/tmp/test.txt", "hello world", make_dirs=True)
+    # THEN the file is in the fake filesystem
+    assert fake.files["/tmp/test.txt"] == "hello world"
 
 
 def test_remove_path() -> None:
     """remove_path calls container.remove_path."""
-    # GIVEN a container
-    container = _make_container()
-    wl = Workload(container)
+    # GIVEN a container with a file
+    fake = FakeContainer(files={"/tmp/to-remove.txt": "content"})
+    wl = _workload(fake)
 
     # WHEN a path is removed
     wl.remove_path("/tmp/to-remove.txt", recursive=True)
 
-    # THEN remove_path was called
-    container.remove_path.assert_called_once_with("/tmp/to-remove.txt", recursive=True)
+    # THEN the file is gone
+    assert "/tmp/to-remove.txt" not in fake.files
 
 
 def test_ensure_layer_adds_and_autostarts() -> None:
     """ensure_layer adds a Pebble layer and autostarts services."""
     # GIVEN a container
-    container = _make_container()
-    wl = Workload(container)
+    fake = FakeContainer()
+    wl = _workload(fake)
 
-    services = {
+    services: Mapping[str, Mapping[str, str]] = {
         "catalogue": {
             "override": "replace",
             "summary": "catalogue",
@@ -298,29 +407,31 @@ def test_ensure_layer_adds_and_autostarts() -> None:
     wl.ensure_layer("catalogue", services)
 
     # THEN add_layer and autostart were called
-    container.add_layer.assert_called_once()
-    container.autostart.assert_called_once()
+    assert len(fake.add_layer_calls) == 1
+    assert fake.add_layer_calls[0][0] == "catalogue"
+    assert len(fake.autostart_calls) == 1
+    # AND the plan now contains the service
+    assert "catalogue" in fake._plan_services
+    assert fake._plan_services["catalogue"]["command"] == "nginx"
 
 
 def test_restart_verifies_service_running() -> None:
     """Restart succeeds when the service comes up after restart."""
     # GIVEN a container with a running service
-    svc = _make_service_info("catalogue", ServiceStatus.ACTIVE)
-    container = _make_container(services={"catalogue": svc})
-    wl = Workload(container)
+    fake = FakeContainer(services={"catalogue": ServiceStatus.ACTIVE})
+    wl = _workload(fake)
 
     # WHEN the service is restarted
     # THEN no exception is raised (service is active)
     wl.restart("catalogue")
-    container.restart.assert_called_once_with("catalogue")
+    assert fake.restart_calls == ["catalogue"]
 
 
 def test_restart_raises_when_service_stays_down() -> None:
     """Restart raises ServiceNotRunningError when service stays down."""
     # GIVEN a container whose service is inactive after restart
-    svc = _make_service_info("catalogue", ServiceStatus.INACTIVE)
-    container = _make_container(services={"catalogue": svc})
-    wl = Workload(container)
+    fake = FakeContainer(services={"catalogue": ServiceStatus.INACTIVE})
+    wl = _workload(fake)
 
     # WHEN the service is restarted
     # THEN the charm refuses to believe the return value
