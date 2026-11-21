@@ -23,7 +23,6 @@ from catalogue_state import (
     compute,
     fetch,
     intent_from,
-    status_plan,
     status_without_intent,
 )
 
@@ -455,47 +454,6 @@ def test_compute_all_three_deltas_yields_all_outcomes() -> None:
 
 
 # --- status tests ---
-
-
-def test_status_plan_not_ready() -> None:
-    """status_plan returns Waiting when the container is not ready."""
-    # GIVEN a container that is not ready
-    state: ContainerNotReady = ContainerNotReady()
-    intent = _intent()
-
-    # WHEN status is determined
-    status = status_plan(state, intent, (Noop(),))
-
-    # THEN the unit reports Waiting
-    assert isinstance(status, StatusWaiting)
-    assert status.reason == "Waiting for Pebble ready"
-
-
-def test_status_plan_ready_noop() -> None:
-    """status_plan returns Active when converged."""
-    # GIVEN a converged container
-    state = _ready()
-    intent = _intent()
-
-    # WHEN status is determined
-    status = status_plan(state, intent, (Noop(),))
-
-    # THEN the unit reports Active
-    assert isinstance(status, StatusActive)
-
-
-def test_status_plan_ready_with_outcomes() -> None:
-    """status_plan returns Active when outcomes are being applied."""
-    # GIVEN a container that needs changes
-    state = _ready(running_nginx_config="old")
-    intent = _intent(nginx_config="new")
-
-    # WHEN status is determined
-    outcomes = compute(state, intent)
-    status = status_plan(state, intent, outcomes)
-
-    # THEN the unit reports Active (changes are being applied)
-    assert isinstance(status, StatusActive)
 
 
 def test_status_without_intent_not_ready() -> None:

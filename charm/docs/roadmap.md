@@ -51,6 +51,14 @@ Introduce the decide/act split without changing observable behaviour.
   `can_connect()`.
 - Acceptance: one `_reconcile` in `charm.py`; every step safe to run twice and
   safe to never run; `charm-reviewer` audit passes rules 1 and 7.
+  **Done 2026-11-21** — single `_reconcile` + `_on_collect_status` (observed
+  for both `collect_unit_status` and `collect_app_status`); the per-event
+  handlers deleted; `_apply_status` deleted; `status_plan` and `StatusBlocked`
+  removed from the pure core; `provide_ingress_requirements` runs on every
+  reconcile (declarative, idempotent); `update_status` and `leader_elected`
+  added to the observed set (self-heal cadence + new-leader republish);
+  Waiting message kept at upstream's exact wording ("Waiting for Pebble
+  ready" — the conscious choice to be recorded in the stage-4 ADR).
 
 ## Stage 3 — Test layers
 

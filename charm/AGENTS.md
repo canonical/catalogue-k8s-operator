@@ -22,14 +22,13 @@ the thing to fix.**
 
 ## Where we are
 
-The charm works upstream: events funnel into `_reconcile`, which builds
-intent, fetches running state via the `Workload` module, computes outcomes
-purely in `catalogue_state.py`, and applies them. The decide/act split
-landed 2026-11-21 (stage 1): `_update_*` bool-returning mutators are gone;
-`catalogue_state.py` is the pure core; `workload.py` owns all Pebble
-operations. Not yet true: the collapse of the per-event handlers into that
-single `_reconcile` (stage 2), the test-layer split (stage 3), and the
-docs/ADRs (stage 4).
+The charm works upstream: events funnel into a single `_reconcile`, which
+builds intent, fetches running state via the `Workload` module, computes
+outcomes purely in `catalogue_state.py`, and applies them. Status is
+reported by `_on_collect_status` (observed for both `collect_unit_status`
+and `collect_app_status`). The decide/act split landed 2026-11-21 (stage 1);
+the single-reconciler collapse landed 2026-11-21 (stage 2). Not yet true:
+the test-layer split (stage 3) and the docs/ADRs (stage 4).
 
 The public interface — relations, config options, the `get-url` action — is
 what `charmcraft.yaml` declares; that YAML is the list, and this file
@@ -54,9 +53,8 @@ review.
    deferrable — including `config_changed`, `upgrade_charm`, relation events,
    and Pebble events (defer until `can_connect()`) — goes through `_reconcile`.
    The one allowed exception is `upgrade_charm` *if* it needs migration logic
-   distinct from convergence. Today the charm funnels into `_reconcile` from
-   per-event handlers; collapsing them is roadmap work, and new code must not
-   widen the funnel.
+   distinct from convergence. The collapse landed 2026-11-21; new code must
+   not add per-event handlers.
 2. **Charm logic and workload logic are separate modules.** `src/charm.py`
    only observes events, maps config and relation data to intent, and reports
    status. Everything that touches the Pebble container — `push`/`pull`/
@@ -167,7 +165,7 @@ docs/
   roadmap.md              # staged delivery plan (overview.md and pattern.md land with the refactor)
   adr/                    # numbered decision records; starts with the refactor. Load `new-adr` first.
 src/
-  charm.py                # CatalogueCharm: today per-event handlers -> _reconcile; target: single _reconcile + collect_unit_status
+  charm.py                # CatalogueCharm: single _reconcile + _on_collect_status
   nginx_config.py         # pure nginx config rendering — no ops imports, must stay that way
   catalogue_state.py      # pure core: intent, state, outcome ADT, fetch/compute, status
   workload.py             # Pebble container operations; never imports ops

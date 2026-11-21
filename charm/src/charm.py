@@ -13,11 +13,11 @@ from collections.abc import Mapping, Sequence
 from typing import Any, assert_never, cast
 from urllib.parse import urlparse
 
+import ops
 import ops_tracing
 from charms.catalogue_k8s.v1.catalogue import (
     CatalogueConsumer,
     CatalogueItem,
-    CatalogueItemsChangedEvent,
     CatalogueProvider,
 )
 from charms.istio_beacon_k8s.v0.service_mesh import ServiceMeshConsumer
@@ -26,8 +26,8 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
 )
-from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
-from ops.charm import ActionEvent, CharmBase
+from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
+from ops.charm import ActionEvent, CharmBase, CollectStatusEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import Error
@@ -51,6 +51,7 @@ class CatalogueCharm(CharmBase):
         super().__init__(*args)
         self.name = "catalogue"  # container, layer, service
         self._fqdn = socket.getfqdn()
+        self._reconcile_failure: ops.StatusBase | None = None
 
         self.unit.set_ports(80)
 
@@ -102,26 +103,26 @@ class CatalogueCharm(CharmBase):
 
         self._log_forwarder = LogForwarder(self, relation_name="logging")
 
-        self.framework.observe(
-            self.on.catalogue_pebble_ready,
-            self._on_catalogue_pebble_ready,
-        )
-        self.framework.observe(
-            self._info.on.items_changed,
-            self._on_items_changed,
-        )
-        self.framework.observe(self.on.upgrade_charm, self._on_upgrade)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self._ingress.on.ready, self._on_ingress_ready)
-        self.framework.observe(
-            self._ingress.on.revoked,
-            self._on_ingress_revoked,
-        )
-        self.framework.observe(
-            self._cert_requirer.on.certificate_available,
-            self._on_certificate_available,
-        )
+        # Status collection is registered first and only reports.
+        self.framework.observe(self.on.collect_unit_status, self._on_collect_status)
+        self.framework.observe(self.on.collect_app_status, self._on_collect_status)
+
+        # Non-deferrable: actions keep dedicated handlers.
         self.framework.observe(self.on.get_url_action, self._get_url)
+
+        # All deferrable events converge through one reconciler.
+        for event in (
+            self.on.catalogue_pebble_ready,
+            self.on.config_changed,
+            self.on.upgrade_charm,
+            self.on.update_status,
+            self.on.leader_elected,
+            self._info.on.items_changed,
+            self._ingress.on.ready,
+            self._ingress.on.revoked,
+            self._cert_requirer.on.certificate_available,
+        ):
+            self.framework.observe(event, self._reconcile)
 
     # --- Action ---
 
@@ -141,50 +142,22 @@ class CatalogueCharm(CharmBase):
             }
         )
 
-    # --- Event handlers ---
-
-    def _on_ingress_ready(self, event: IngressPerAppReadyEvent) -> None:
-        logger.info("This app's ingress URL: %s", event.url)
-        self._reconcile(self.items)
-
-    def _on_ingress_revoked(self, _: object) -> None:
-        logger.info("This app no longer has ingress")
-        self._reconcile(self.items)
-
-    def _on_catalogue_pebble_ready(self, _: object) -> None:
-        self._reconcile(self.items)
-
-    def _on_upgrade(self, _: object) -> None:
-        self._reconcile(self.items)
-
-    def _on_config_changed(self, _: object) -> None:
-        self._reconcile(self.items)
-
-    def _on_items_changed(self, event: CatalogueItemsChangedEvent) -> None:
-        self._reconcile(cast(Sequence[Mapping[str, object]], event.items))
-
-    def _on_certificate_available(self, _: object) -> None:
-        self._reconcile(self.items)
-
-        # When server cert changes we need to update the scheme we
-        # inform traefik.
-        parsed = urlparse(self._internal_url)
-        port = parsed.port or 80 if parsed.scheme == "http" else 443
-        self._ingress.provide_ingress_requirements(scheme=parsed.scheme, port=port)
-
     # --- Reconciler ---
 
-    def _reconcile(self, items: Sequence[Mapping[str, object]]) -> None:
+    def _reconcile(self, _: ops.EventBase) -> None:
         """Converge the container toward the desired state.
 
         Builds intent from charm config and relation data, fetches
         the running state, computes outcomes, and applies them.
+        Every step is safe to run twice and safe to never run.
         """
+        self._reconcile_failure = None
+
         tls_material = self._tls_config
         override_hostname_raw = self.config.get("override_hostname")
         override_hostname = str(override_hostname_raw) if override_hostname_raw else None
         intent = catalogue_state.intent_from(
-            items=items,
+            items=self.items,
             charm_config=self.charm_config,
             tls=tls_material,
             override_hostname=override_hostname,
@@ -195,21 +168,19 @@ class CatalogueCharm(CharmBase):
             outcomes = catalogue_state.compute(state, intent)
             for outcome in outcomes:
                 self._apply(outcome)
-            status = catalogue_state.status_plan(state, intent, outcomes)
         except (Error, WorkloadError) as e:
-            self._apply_status(
-                catalogue_state.StatusBlocked(
-                    remedy=(
-                        f"Workload operation failed: {e}; "
-                        f"check the container with "
-                        f"'juju exec --unit {self.unit.name} -- pebble services'"
-                    )
-                )
+            self._reconcile_failure = BlockedStatus(
+                f"Workload operation failed: {e}; "
+                f"check the container with "
+                f"'juju exec --unit {self.unit.name} -- pebble services'"
             )
             logger.error("Workload operation failed: %s", e)
             return
 
-        self._apply_status(status)
+        # Declarative databag write — idempotent when values unchanged.
+        parsed = urlparse(self._internal_url)
+        port = parsed.port or 80 if parsed.scheme == "http" else 443
+        self._ingress.provide_ingress_requirements(scheme=parsed.scheme, port=port)
 
     def _apply(self, outcome: catalogue_state.CatalogueOutcome) -> None:
         """Perform one decided outcome. Exhaustive match."""
@@ -239,25 +210,34 @@ class CatalogueCharm(CharmBase):
             case _ as unreachable:
                 assert_never(unreachable)
 
-    def _apply_status(self, status: catalogue_state.CatalogueStatus) -> None:
-        """Map a CatalogueStatus ADT to ops statuses and set them.
+    # --- Status ---
 
-        Sets both app status (leader-only) and unit status, matching
-        the existing semantics.
+    def _on_collect_status(self, event: CollectStatusEvent) -> None:
+        """Report status. Must not mutate anything.
+
+        Push statuses (from a failed reconcile) take precedence;
+        pull statuses are derived from the running container state.
         """
-        match status:
+        if self._reconcile_failure is not None:
+            event.add_status(self._reconcile_failure)
+            return
+
+        try:
+            state = catalogue_state.fetch(self._workload)
+        except Error:
+            # can_connect() is point-in-time: the socket can drop
+            # between the check and the read. The collector runs at
+            # the end of every hook — it must never crash the hook
+            # into error state; report Waiting instead.
+            event.add_status(WaitingStatus(catalogue_state.WAITING_FOR_PEBBLE_MESSAGE))
+            return
+        match catalogue_state.status_without_intent(state):
             case catalogue_state.StatusActive(message=message):
-                ops_status = ActiveStatus(message) if message else ActiveStatus()
+                event.add_status(ActiveStatus(message) if message else ActiveStatus())
             case catalogue_state.StatusWaiting(reason=reason):
-                ops_status = WaitingStatus(reason)
-            case catalogue_state.StatusBlocked(remedy=remedy):
-                ops_status = BlockedStatus(remedy)
+                event.add_status(WaitingStatus(reason))
             case _ as unreachable:
                 assert_never(unreachable)
-
-        if self.unit.is_leader():
-            self.app.status = ops_status
-        self.unit.status = ops_status
 
     # --- Properties ---
 

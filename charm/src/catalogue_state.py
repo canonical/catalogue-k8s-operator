@@ -6,6 +6,10 @@
 
 Decides what to do without performing any effects. Imports only stdlib
 and nginx_config — never ops or workload.
+
+The status union is pull-only: the pure core derives Active and
+Waiting from container state. Blocked is a push status built by the
+shell from exception context — the core never produces it.
 """
 
 import logging
@@ -30,6 +34,8 @@ LAYER_SERVICES: Mapping[str, Mapping[str, str]] = {
         "startup": "enabled",
     }
 }
+
+WAITING_FOR_PEBBLE_MESSAGE = "Waiting for Pebble ready"
 
 
 # --- Data types ---
@@ -204,14 +210,7 @@ class StatusWaiting:
     reason: str
 
 
-@dataclass(frozen=True)
-class StatusBlocked:
-    """An administrator must intervene."""
-
-    remedy: str
-
-
-type CatalogueStatus = StatusActive | StatusWaiting | StatusBlocked
+type CatalogueStatus = StatusActive | StatusWaiting
 
 
 # --- Fetch ---
@@ -342,30 +341,6 @@ def _compute_ready(
 # --- Status ---
 
 
-def status_plan(
-    state: CatalogueState,
-    intent: CatalogueIntent,
-    outcomes: tuple[CatalogueOutcome, ...],
-) -> CatalogueStatus:
-    """Determine status from state, intent, and computed outcomes.
-
-    Args:
-        state: The fetched container state.
-        intent: The desired state (reserved for future use).
-        outcomes: The outcomes computed from state and intent.
-    """
-    match state:
-        case ContainerNotReady():
-            return StatusWaiting(reason="Waiting for Pebble ready")
-        case ContainerReady():
-            # Apply succeeded: state matched intent before, and every
-            # effect ran without raising (restart verifies the service
-            # came up). Report Active — stage 2 may refine this.
-            return StatusActive()
-        case _ as unreachable:
-            assert_never(unreachable)
-
-
 def status_without_intent(state: CatalogueState) -> CatalogueStatus:
     """Determine status from state alone (no intent available).
 
@@ -374,7 +349,7 @@ def status_without_intent(state: CatalogueState) -> CatalogueStatus:
     """
     match state:
         case ContainerNotReady():
-            return StatusWaiting(reason="Waiting for Pebble ready")
+            return StatusWaiting(reason=WAITING_FOR_PEBBLE_MESSAGE)
         case ContainerReady():
             return StatusActive()
         case _ as unreachable:
