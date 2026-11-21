@@ -14,10 +14,12 @@ Align `pyproject.toml` with the conventions `AGENTS.md` declares, and port the
 - `pyproject.toml`: drop `[tool.black]`; enable `E501` + `W505` (99/72), `ANN`,
   `D`, `PLC0415`; pyright `typeCheckingMode = "strict"`, `pythonVersion = "3.14"`,
   over `src` **and** `tests`; `tox.ini` gains `ruff format` in `fmt` and a
-  `work_dir` outside the tree.
+  `work_dir` outside the tree. **Done 2026-11-20** — pyproject.toml, tox.ini,
+  and all code fixes landed; the owned lib stays at pyright standard via
+  `pyright-lib/`; `tox -e fmt,lint,static,unit` green.
 - Port `.opencode/` per the three-layer filter in `AGENTS.md` (agents, skills,
   `opencode.json` references). **Done 2026-11-20** — agents, the skill set,
-  and `opencode.json` are in place; the pyproject/tox items above remain.
+  and `opencode.json` are in place; with the item above, stage 0 is complete.
 - Acceptance: `tox -e fmt,lint,static,unit` green on the tightened config;
   agents load and cite the new skills.
 

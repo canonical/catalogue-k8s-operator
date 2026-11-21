@@ -26,10 +26,10 @@ The charm works upstream: events funnel into `_configure`, which reads back
 the running nginx and catalogue configs before deciding to restart — the
 verify instinct already exists. Not yet true: a single `_reconcile`
 (per-event handlers remain), a pure core (`catalogue_state.py`), the
-decide/act split (the `_update_*` methods mutate *and* return changed-flags),
-and a toolchain config that means what it says (`pyproject.toml` still ignores
-`E501`, carries a `[tool.black]` section, and sets pyright
-`pythonVersion = "3.8"` against `requires-python = "~=3.14.0"`).
+decide/act split (the `_update_*` methods mutate *and* return changed-flags).
+Stage 0 (toolchain alignment) landed 2026-11-20: `pyproject.toml` now
+enforces `E501`/`W505` (99/72), `ANN`, `D`, `PLC0415`, and pyright strict at
+Python 3.14 over `src` and `tests`; `tox -e fmt,lint,static,unit` is green.
 `docs/roadmap.md` is the source of truth for staged delivery — check it before
 treating a missing piece as a defect rather than as unstarted work.
 
@@ -145,13 +145,12 @@ tox -e lock        # regenerate uv.lock after changing pyproject.toml
 tox -e flaplint    # advisory: relation-databag ordering churn. Not in envlist.
 ```
 
-The current `pyproject.toml` does not yet enforce all of this (see *Where we
-are*); aligning it is roadmap stage 0, so until then a green gate is weaker
-than it looks. **A change is not done until `fmt`, `lint`, `static` and
-`unit` are green.** That is the floor, not the finish line — reread the
-non-negotiables above, because none of those four gates can see rules 1, 2, 4,
-5, 6, 7 or 8. Run `flaplint` as well when the change touches a databag write,
-a file write, or a hash.
+The config now enforces the conventions declared above: `E501`/`W505`
+(99/72), `ANN`, `D`, `PLC0415`, and pyright strict at Python 3.14 over `src`
+and `tests`. A green `tox -e fmt,lint,static,unit` is still not evidence of
+compliance with rules 1, 2, 4, 5, 6, 7, or 8 — those are audited by
+`charm-reviewer`, not by any gate. Run `flaplint` as well when the change
+touches a databag write, a file write, or a hash.
 
 `uv.lock` is committed. Dependencies go in `pyproject.toml`, never in
 `charmcraft.yaml`'s `charm-libs` — that key is only for Charmhub-hosted
@@ -165,6 +164,7 @@ charmcraft.yaml           # assumes k8s-api; containers: catalogue; platforms: u
 pyproject.toml            # ops[tracing], lightkube, pydantic, cosl, ...
 uv.lock
 tox.ini
+pyright-lib/              # pyright project for lib/charms/catalogue_k8s (standard mode)
 docs/
   roadmap.md              # staged delivery plan (overview.md and pattern.md land with the refactor)
   adr/                    # numbered decision records; starts with the refactor. Load `new-adr` first.

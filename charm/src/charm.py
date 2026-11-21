@@ -9,8 +9,9 @@
 import json
 import logging
 import socket
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
-from typing import Optional, cast
+from typing import Any, cast
 from urllib.parse import urlparse, urlunparse
 
 import ops_tracing
@@ -29,7 +30,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
 from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
 
 from nginx_config import CA_CERT_PATH, CERT_PATH, KEY_PATH, NGINX_CONFIG_PATH, NginxConfigBuilder
@@ -42,7 +43,7 @@ CONFIG_PATH = ROOT_PATH + "/config.json"
 
 @dataclass
 class TLSConfig:
-    """TLS configuration received by the charm over the `certificates` relation."""
+    """TLS configuration received over the `certificates` relation."""
 
     server_cert: str
     ca_cert: str
@@ -52,7 +53,8 @@ class TLSConfig:
 class CatalogueCharm(CharmBase):
     """Catalogue charm class."""
 
-    def __init__(self, *args):
+    def __init__(self, *args: Any) -> None:  # noqa: ANN401
+        """Initialize the charm and register event observers."""
         super().__init__(*args)
         self.name = "catalogue"  # container, layer, service
         self._fqdn = socket.getfqdn()
@@ -68,7 +70,7 @@ class CatalogueCharm(CharmBase):
         self._info = CatalogueProvider(charm=self)
 
         self._csr_attributes = CertificateRequestAttributes(
-            # the `common_name` field is required but limited to 64 characters.
+            # `common_name` is required but limited to 64 chars.
             # since it's overridden by sans, we can use a short,
             # constrained value like app name.
             common_name=self.app.name,
@@ -107,30 +109,30 @@ class CatalogueCharm(CharmBase):
 
         self.framework.observe(
             self.on.catalogue_pebble_ready,
-            self._on_catalogue_pebble_ready,  # pyright: ignore
+            self._on_catalogue_pebble_ready,
         )
         self.framework.observe(
             self._info.on.items_changed,
-            self._on_items_changed,  # pyright: ignore
+            self._on_items_changed,
         )
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self._ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
+        self.framework.observe(self._ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(
             self._ingress.on.revoked,
-            self._on_ingress_revoked,  # pyright: ignore
+            self._on_ingress_revoked,
         )
         self.framework.observe(
-            self._cert_requirer.on.certificate_available,  # pyright: ignore
+            self._cert_requirer.on.certificate_available,
             self._on_certificate_available,
         )
         self.framework.observe(self.on.get_url_action, self._get_url)
 
-    def _get_url(self, event: ActionEvent):
-        """Return the external hostname to be passed to ingress via the relation.
+    def _get_url(self, event: ActionEvent) -> None:
+        """Return the external hostname to pass to ingress via relation.
 
-        If we do not have an ingress, then use the pod dns name as hostname.
-        Relying on cluster's DNS service, those dns names are routable virtually
+        If we do not have an ingress, use the pod dns name as hostname.
+        Relying on cluster DNS, those dns names are routable virtually
         exclusively inside the cluster.
         """
         output = self._internal_url
@@ -142,45 +144,47 @@ class CatalogueCharm(CharmBase):
             }
         )
 
-    def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
+    def _on_ingress_ready(self, event: IngressPerAppReadyEvent) -> None:
         logger.info("This app's ingress URL: %s", event.url)
         self._configure(self.items, push_certs=True)
 
-    def _on_ingress_revoked(self, _):
+    def _on_ingress_revoked(self, _: object) -> None:
         logger.info("This app no longer has ingress")
         self._configure(self.items, push_certs=True)
 
-    def _on_catalogue_pebble_ready(self, _):
-        # We set push_certs to True here to cover the upgrade sequence. When upgrade-charm fires,
-        # the container may not yet be ready, and the certs are written to non-persistent storage
+    def _on_catalogue_pebble_ready(self, _: object) -> None:
+        # We set push_certs to True here to cover the upgrade sequence.
+        # When upgrade-charm fires, the container may not yet be ready,
+        # and the certs are written to non-persistent storage
         # (which is a good thing).
         self._configure(self.items, push_certs=True)
 
-    def _update_status(self, status):
+    def _update_status(self, status: ActiveStatus | BlockedStatus | WaitingStatus) -> None:
         if self.unit.is_leader():
             self.app.status = status
         self.unit.status = status
 
-    def _on_upgrade(self, _):
-        # Ideally we would want to push certs on upgrade, but at this point we can't know for sure
-        # if pebble-ready (can_connect guard).
+    def _on_upgrade(self, _: object) -> None:
+        # Ideally we would want to push certs on upgrade, but at this
+        # point we can't know if pebble-ready (can_connect guard).
         self._configure(self.items)
 
-    def _on_config_changed(self, _):
+    def _on_config_changed(self, _: object) -> None:
         self._configure(self.items)
 
-    def _on_items_changed(self, event: CatalogueItemsChangedEvent):
-        self._configure(event.items)
+    def _on_items_changed(self, event: CatalogueItemsChangedEvent) -> None:
+        self._configure(cast(Sequence[Mapping[str, object]], event.items))
 
-    def _on_certificate_available(self, _):
+    def _on_certificate_available(self, _: object) -> None:
         self._configure(self.items, push_certs=True)
 
-        # When server cert changes we need to update the scheme we inform traefik.
+        # When server cert changes we need to update the scheme we
+        # inform traefik.
         parsed = urlparse(self._internal_url)
         port = parsed.port or 80 if parsed.scheme == "http" else 443
         self._ingress.provide_ingress_requirements(scheme=parsed.scheme, port=port)
 
-    def _push_certs(self):
+    def _push_certs(self) -> None:
         if tls_config := self._tls_config:
             self.workload.push(CERT_PATH, tls_config.server_cert, make_dirs=True)
             self.workload.push(KEY_PATH, tls_config.private_key, make_dirs=True)
@@ -189,7 +193,11 @@ class CatalogueCharm(CharmBase):
             for path in [KEY_PATH, CERT_PATH, CA_CERT_PATH]:
                 self.workload.remove_path(path, recursive=True)
 
-    def _configure(self, items, push_certs: bool = False):
+    def _configure(
+        self,
+        items: Sequence[Mapping[str, object]],
+        push_certs: bool = False,
+    ) -> None:
         if not self.workload.can_connect():
             self._update_status(WaitingStatus("Waiting for Pebble ready"))
             return
@@ -202,12 +210,13 @@ class CatalogueCharm(CharmBase):
                 logger.error(str(e))
                 return
 
+        mutable_items: list[MutableMapping[str, object]] = [dict(item) for item in items]
         if override_hostname := self.config.get("override_hostname"):
-            for item in items:
-                item["url"] = self._override_hostname(item["url"], str(override_hostname))
+            for item in mutable_items:
+                item["url"] = self._override_hostname(str(item["url"]), str(override_hostname))
 
         nginx_config_changed = self._update_web_server_config()
-        catalogue_config_changed = self._update_catalogue_config(items)
+        catalogue_config_changed = self._update_catalogue_config(mutable_items)
         pebble_layer_changed = self._update_pebble_layer()
         restart = any([nginx_config_changed, catalogue_config_changed, pebble_layer_changed])
 
@@ -232,7 +241,7 @@ class CatalogueCharm(CharmBase):
         self.workload.autostart()
         return True
 
-    def _update_catalogue_config(self, items) -> bool:
+    def _update_catalogue_config(self, items: Sequence[Mapping[str, object]]) -> bool:
         config = {**self.charm_config, "apps": items}
 
         if self._running_catalogue_config == config:
@@ -275,7 +284,7 @@ class CatalogueCharm(CharmBase):
             return ""
 
     @property
-    def _running_catalogue_config(self) -> dict:
+    def _running_catalogue_config(self) -> dict[str, object]:
         """Get the on-disk Catalogue config."""
         if not self.workload.can_connect():
             return {}
@@ -304,20 +313,20 @@ class CatalogueCharm(CharmBase):
         )
 
     @property
-    def items(self):
+    def items(self) -> Sequence[Mapping[str, object]]:
         """Applications to display in the catalogue."""
         if not self._info:
             return []
         return self._info.items
 
     @property
-    def workload(self):
+    def workload(self) -> Container:
         """The main workload of the charm."""
         return self.unit.get_container(self.name)
 
     @property
-    def charm_config(self):
-        """The part of the charm config that is set through `juju config`."""
+    def charm_config(self) -> dict[str, object]:
+        """The part of the charm config set through `juju config`."""
         return {
             "title": self.model.config["title"],
             "tagline": self.model.config["tagline"],
@@ -327,7 +336,7 @@ class CatalogueCharm(CharmBase):
 
     @property
     def _internal_url(self) -> str:
-        """Return the fqdn dns-based in-cluster (private) address of the catalogue server."""
+        """Return the fqdn dns-based in-cluster (private) address."""
         scheme = "https" if self._tls_available else "http"
         port = 80 if scheme == "http" else 443
         return f"{scheme}://{self._fqdn}:{port}"
@@ -339,7 +348,7 @@ class CatalogueCharm(CharmBase):
         return int(parsed_url.port or 80)
 
     @property
-    def _tls_config(self) -> Optional[TLSConfig]:
+    def _tls_config(self) -> TLSConfig | None:
         certificates, key = self._cert_requirer.get_assigned_certificate(
             certificate_request=self._csr_attributes
         )

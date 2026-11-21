@@ -20,14 +20,14 @@ def charm_path() -> Path:
     if charm_file := os.environ.get("CHARM_PATH"):
         return Path(charm_file).resolve()
 
-    sh.charmcraft.pack()  # type: ignore[attr-defined]
+    sh.charmcraft.pack()
     charms = sorted(Path(".").glob("*.charm"))
     assert charms, "No .charm file found after 'charmcraft pack'"
     return charms[-1].resolve()
 
 
 @pytest.fixture(scope="module")
-def resources() -> dict:
+def resources() -> dict[str, str]:
     """Resources for the charm."""
     metadata = yaml.safe_load(Path("./charmcraft.yaml").read_text())
     return {"catalogue-image": metadata["resources"]["catalogue-image"]["upstream-source"]}

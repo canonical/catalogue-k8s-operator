@@ -17,13 +17,15 @@ TRAEFIK_APP_NAME = "traefik"
 
 
 @pytest.mark.juju_setup
-def test_build_and_deploy(juju: jubilant.Juju, charm_path: Path, resources: dict):
+def test_build_and_deploy(
+    juju: jubilant.Juju, charm_path: Path, resources: dict[str, str]
+) -> None:
     """Deploy the charm and wait for it to become active."""
     juju.deploy(charm_path, app=APP_NAME, resources=resources)
     juju.wait(active_idle, timeout=5 * 60)
 
 
-def test_ingress(juju: jubilant.Juju):
+def test_ingress(juju: jubilant.Juju) -> None:
     """Test ingress integration with traefik."""
     juju.deploy("traefik-k8s", app=TRAEFIK_APP_NAME, channel="latest/edge", trust=True)
     juju.integrate(f"{APP_NAME}:ingress", TRAEFIK_APP_NAME)

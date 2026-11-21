@@ -7,12 +7,13 @@ import json
 import os
 import socket
 import unittest
-from unittest.mock import Mock, PropertyMock, patch
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
 from urllib.parse import urlparse
 
 from charms.catalogue_k8s.v1.catalogue import DEFAULT_RELATION_NAME
 from ops.charm import ActionEvent
-from ops.model import ActiveStatus
+from ops.model import ActiveStatus, Container
+from ops.pebble import Plan
 from ops.testing import Harness
 
 from charm import CatalogueCharm
@@ -21,7 +22,7 @@ CONTAINER_NAME = "catalogue"
 
 
 class TestCharm(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         os.environ["JUJU_VERSION"] = "3.0.3"
         self.harness = Harness(CatalogueCharm)
         self.harness.set_model_name("test-model")
@@ -29,7 +30,7 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
 
-    def test_catalogue_pebble_ready(self):
+    def test_catalogue_pebble_ready(self) -> None:
         expected_plan = {
             "services": {
                 "catalogue": {
@@ -48,7 +49,7 @@ class TestCharm(unittest.TestCase):
         self.assertTrue(service.is_running())
         self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
-    def test_reconfigure_applications(self):
+    def test_reconfigure_applications(self) -> None:
         # Given the catalogue and a remote charm
         # When a relation is established
         # Then the remote charm should expose an application entry
@@ -75,21 +76,21 @@ class TestCharm(unittest.TestCase):
                     "icon": "some-cool-icon",
                     "description": "",
                     "api_docs": "",
-                    "api_endpoints": {}
+                    "api_endpoints": {},
                 }
             ],
             json.loads(data.read())["apps"],
         )
 
-    def test_api_type(self):
+    def test_api_type(self) -> None:
         # Given the catalogue and a remote charm
         # When a relation is established
         # AND the remote charm exposes an application entry
-        # AND the remote charm writes values for api_docs and api_endpoints to the databag
+        # AND the remote charm writes api_docs and api_endpoints
         # THEN Catalogue should write the entry to its config
-        # AND the correct entries should show up for api_docs and api_endpoints in the config.json file
+        # AND the correct entries should show up in config.json
         apidocs = "some_url_to_upstream_docs"
-        apiendpoint = {"endpoint_1":"some_endpoint_1", "endpoint_2":"some_endpoint_2"}
+        apiendpoint = {"endpoint_1": "some_endpoint_1", "endpoint_2": "some_endpoint_2"}
         rel_id = self.harness.add_relation(DEFAULT_RELATION_NAME, "rc")
         self.harness.add_relation_unit(rel_id, "rc/0")
         self.harness.update_relation_data(
@@ -99,8 +100,8 @@ class TestCharm(unittest.TestCase):
                 "name": "remote-charm",
                 "url": "https://localhost",
                 "icon": "some-cool-icon",
-                "api_docs":apidocs,
-                "api_endpoints":json.dumps(apiendpoint),
+                "api_docs": apidocs,
+                "api_endpoints": json.dumps(apiendpoint),
             },
         )
 
@@ -113,19 +114,18 @@ class TestCharm(unittest.TestCase):
                     "icon": "some-cool-icon",
                     "description": "",
                     "api_docs": apidocs,
-                    "api_endpoints": apiendpoint
+                    "api_endpoints": apiendpoint,
                 }
             ],
             json.loads(data.read())["apps"],
         )
 
-
     @patch.multiple(
         "charm.CatalogueCharm",
-        _push_certs=lambda *_: None,
+        _push_certs=lambda *_: None,  # pyright: ignore[reportUnknownLambdaType]
     )
-    def test_server_cert(self):
-        patcher = patch.object(CatalogueCharm, "_tls_available",  new_callable=PropertyMock)
+    def test_server_cert(self) -> None:
+        patcher = patch.object(CatalogueCharm, "_tls_available", new_callable=PropertyMock)
         self.mock_tls_ready = patcher.start()
         self.addCleanup(patcher.stop)
         # Test with TLS
@@ -148,16 +148,16 @@ class TestCharm(unittest.TestCase):
 
     @patch("charm.logger")
     @patch("charm.CatalogueCharm._configure")
-    def test_ingress(self, mock_configure, mock_logger):
+    def test_ingress(self, mock_configure: MagicMock, mock_logger: MagicMock) -> None:
         class MockInfo:
             @property
-            def items(self):
+            def items(self) -> dict[str, str]:
                 return {
                     "name": "test_value",
                 }
 
         # Test with ingress ready
-        self.harness.charm._info = MockInfo()  # pyright: ignore
+        self.harness.charm._info = MockInfo()  # pyright: ignore[reportAttributeAccessIssue]
         self.harness.charm._on_ingress_ready(Mock(url="https://testingress.com"))
 
         mock_logger.info.assert_called_with(
@@ -169,19 +169,19 @@ class TestCharm(unittest.TestCase):
         mock_configure.reset_mock()
 
         # Test with ingress revoked
-        self.harness.charm._info = None  # pyright: ignore
+        self.harness.charm._info = None  # pyright: ignore[reportAttributeAccessIssue]
         self.harness.charm._on_ingress_revoked(None)
 
         mock_logger.info.assert_called_with("This app no longer has ingress")
         mock_configure.assert_called_with([], push_certs=True)
 
-    def test_get_url_action_no_ingress(self):
+    def test_get_url_action_no_ingress(self) -> None:
         action_event = Mock(spec=ActionEvent)
         self.harness.charm._get_url(action_event)
         action_event.set_results.assert_called_once_with({"url": f"http://{socket.getfqdn()}:80"})
 
-    @patch("ops.model.Model.get_binding", lambda *_, **__: None)
-    def test_get_url_action_ingress(self):
+    @patch("ops.model.Model.get_binding", lambda *_: None)  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
+    def test_get_url_action_ingress(self) -> None:
         rel_id = self.harness.add_relation("ingress", "remote")
         self.harness.add_relation_unit(rel_id, "remote/0")
         self.harness.update_relation_data(
@@ -193,9 +193,9 @@ class TestCharm(unittest.TestCase):
         action_event.set_results.assert_called_once_with({"url": "https://endpoint/subpath"})
 
     @property
-    def _container(self):
+    def _container(self) -> Container:
         return self.harness.model.unit.get_container(CONTAINER_NAME)
 
     @property
-    def _plan(self):
+    def _plan(self) -> Plan:
         return self.harness.get_container_pebble_plan(CONTAINER_NAME)

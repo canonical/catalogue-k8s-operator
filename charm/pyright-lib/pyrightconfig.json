@@ -1,0 +1,1 @@
+{"include": ["../lib/charms/catalogue_k8s"], "pythonVersion": "3.14", "pythonPlatform": "Linux", "typeCheckingMode": "standard"}

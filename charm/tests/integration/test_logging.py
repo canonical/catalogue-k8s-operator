@@ -20,8 +20,10 @@ LOKI_APP_NAME = "loki"
 
 
 @pytest.mark.juju_setup
-def test_logging_integration(juju: jubilant.Juju, charm_path: Path, resources: dict):
-    """Deploy catalogue and loki, integrate via logging, and verify the relation is active."""
+def test_logging_integration(
+    juju: jubilant.Juju, charm_path: Path, resources: dict[str, str]
+) -> None:
+    """Deploy catalogue and loki, integrate via logging, verify."""
     juju.deploy(
         charm_path,
         app=APP_NAME,
@@ -34,7 +36,7 @@ def test_logging_integration(juju: jubilant.Juju, charm_path: Path, resources: d
 
 
 @retry(wait=wait_fixed(15), stop=stop_after_attempt(20))
-def test_logs_are_forwarded_to_loki(juju: jubilant.Juju):
+def test_logs_are_forwarded_to_loki(juju: jubilant.Juju) -> None:
     """Verify that catalogue logs are present in Loki."""
     # Generate some traffic to produce access logs
     catalogue_address = get_unit_address(juju, APP_NAME, 0)
