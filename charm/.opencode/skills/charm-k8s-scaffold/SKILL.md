@@ -345,10 +345,10 @@ docs/
   roadmap.md
   adr/
 src/
-  charm.py                # CatalogueCharm: today per-event handlers -> _configure
+  charm.py                # CatalogueCharm: today per-event handlers -> _reconcile; target: single _reconcile + collect_unit_status
   nginx_config.py         # pure nginx config rendering — no ops imports
-  catalogue_state.py      # (planned) pure core
-  workload.py             # (planned) Pebble container operations; never imports ops
+  catalogue_state.py      # pure core: intent, state, outcome ADT, fetch/compute
+  workload.py             # Pebble container operations; never imports ops
 lib/charms/               # vendored Charmhub-hosted interface libraries
 tests/
   unit/

@@ -6,7 +6,7 @@ version = "0.0"
 requires-python = "~=3.14.0"
 
 dependencies = [
-  "ops[tracing]>=2.20.0",
+  "ops[tracing]>=3.10.0",
   "lightkube",
   "lightkube-models",
   "jsonschema",
@@ -28,6 +28,8 @@ dev = [
   "httpcore",
   # Unit
   "pytest",
+  # ops.testing re-exports Scenario's Context/State only when this is installed
+  "ops-scenario>=8",
   "coverage[toml]",
   "deepdiff",
   "fs",

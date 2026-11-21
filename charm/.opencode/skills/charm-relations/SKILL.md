@@ -68,7 +68,7 @@ linters, and humans.
 
 So `optional: true` does **nothing** operationally. The guarantee that the charm
 comes up clean with zero relations lives entirely in `_reconcile` (today,
-`_configure` and its per-event callers) and `collect_unit_status`. The YAML
+`_reconcile` and its per-event callers) and `collect_unit_status`. The YAML
 states the intent; the code has to keep it. Do not treat a correct
 `charmcraft.yaml` as evidence — see the previous section's `certificates`
 example.

@@ -9,10 +9,9 @@
 import json
 import logging
 import socket
-from collections.abc import Mapping, MutableMapping, Sequence
-from dataclasses import dataclass
-from typing import Any, cast
-from urllib.parse import urlparse, urlunparse
+from collections.abc import Mapping, Sequence
+from typing import Any, assert_never, cast
+from urllib.parse import urlparse
 
 import ops_tracing
 from charms.catalogue_k8s.v1.catalogue import (
@@ -30,24 +29,18 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
-from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.pebble import Error
 
-from nginx_config import CA_CERT_PATH, CERT_PATH, KEY_PATH, NGINX_CONFIG_PATH, NginxConfigBuilder
+import catalogue_state
+from catalogue_state import TlsMaterial
+from nginx_config import CA_CERT_PATH, CERT_PATH, KEY_PATH, NGINX_CONFIG_PATH
+from workload import Workload, WorkloadError
 
 logger = logging.getLogger(__name__)
 
 ROOT_PATH = "/web"
 CONFIG_PATH = ROOT_PATH + "/config.json"
-
-
-@dataclass
-class TLSConfig:
-    """TLS configuration received over the `certificates` relation."""
-
-    server_cert: str
-    ca_cert: str
-    private_key: str
 
 
 class CatalogueCharm(CharmBase):
@@ -60,6 +53,8 @@ class CatalogueCharm(CharmBase):
         self._fqdn = socket.getfqdn()
 
         self.unit.set_ports(80)
+
+        self._workload = Workload(self.unit.get_container(self.name))
 
         self.charm_tracing = ops_tracing.Tracing(
             self,
@@ -128,6 +123,8 @@ class CatalogueCharm(CharmBase):
         )
         self.framework.observe(self.on.get_url_action, self._get_url)
 
+    # --- Action ---
+
     def _get_url(self, event: ActionEvent) -> None:
         """Return the external hostname to pass to ingress via relation.
 
@@ -144,39 +141,30 @@ class CatalogueCharm(CharmBase):
             }
         )
 
+    # --- Event handlers ---
+
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent) -> None:
         logger.info("This app's ingress URL: %s", event.url)
-        self._configure(self.items, push_certs=True)
+        self._reconcile(self.items)
 
     def _on_ingress_revoked(self, _: object) -> None:
         logger.info("This app no longer has ingress")
-        self._configure(self.items, push_certs=True)
+        self._reconcile(self.items)
 
     def _on_catalogue_pebble_ready(self, _: object) -> None:
-        # We set push_certs to True here to cover the upgrade sequence.
-        # When upgrade-charm fires, the container may not yet be ready,
-        # and the certs are written to non-persistent storage
-        # (which is a good thing).
-        self._configure(self.items, push_certs=True)
-
-    def _update_status(self, status: ActiveStatus | BlockedStatus | WaitingStatus) -> None:
-        if self.unit.is_leader():
-            self.app.status = status
-        self.unit.status = status
+        self._reconcile(self.items)
 
     def _on_upgrade(self, _: object) -> None:
-        # Ideally we would want to push certs on upgrade, but at this
-        # point we can't know if pebble-ready (can_connect guard).
-        self._configure(self.items)
+        self._reconcile(self.items)
 
     def _on_config_changed(self, _: object) -> None:
-        self._configure(self.items)
+        self._reconcile(self.items)
 
     def _on_items_changed(self, event: CatalogueItemsChangedEvent) -> None:
-        self._configure(cast(Sequence[Mapping[str, object]], event.items))
+        self._reconcile(cast(Sequence[Mapping[str, object]], event.items))
 
     def _on_certificate_available(self, _: object) -> None:
-        self._configure(self.items, push_certs=True)
+        self._reconcile(self.items)
 
         # When server cert changes we need to update the scheme we
         # inform traefik.
@@ -184,133 +172,94 @@ class CatalogueCharm(CharmBase):
         port = parsed.port or 80 if parsed.scheme == "http" else 443
         self._ingress.provide_ingress_requirements(scheme=parsed.scheme, port=port)
 
-    def _push_certs(self) -> None:
-        if tls_config := self._tls_config:
-            self.workload.push(CERT_PATH, tls_config.server_cert, make_dirs=True)
-            self.workload.push(KEY_PATH, tls_config.private_key, make_dirs=True)
-            self.workload.push(CA_CERT_PATH, tls_config.ca_cert, make_dirs=True)
-        else:
-            for path in [KEY_PATH, CERT_PATH, CA_CERT_PATH]:
-                self.workload.remove_path(path, recursive=True)
+    # --- Reconciler ---
 
-    def _configure(
-        self,
-        items: Sequence[Mapping[str, object]],
-        push_certs: bool = False,
-    ) -> None:
-        if not self.workload.can_connect():
-            self._update_status(WaitingStatus("Waiting for Pebble ready"))
+    def _reconcile(self, items: Sequence[Mapping[str, object]]) -> None:
+        """Converge the container toward the desired state.
+
+        Builds intent from charm config and relation data, fetches
+        the running state, computes outcomes, and applies them.
+        """
+        tls_material = self._tls_config
+        override_hostname_raw = self.config.get("override_hostname")
+        override_hostname = str(override_hostname_raw) if override_hostname_raw else None
+        intent = catalogue_state.intent_from(
+            items=items,
+            charm_config=self.charm_config,
+            tls=tls_material,
+            override_hostname=override_hostname,
+        )
+
+        try:
+            state = catalogue_state.fetch(self._workload)
+            outcomes = catalogue_state.compute(state, intent)
+            for outcome in outcomes:
+                self._apply(outcome)
+            status = catalogue_state.status_plan(state, intent, outcomes)
+        except (Error, WorkloadError) as e:
+            self._apply_status(
+                catalogue_state.StatusBlocked(
+                    remedy=(
+                        f"Workload operation failed: {e}; "
+                        f"check the container with "
+                        f"'juju exec --unit {self.unit.name} -- pebble services'"
+                    )
+                )
+            )
+            logger.error("Workload operation failed: %s", e)
             return
 
-        if push_certs:
-            try:
-                self._push_certs()
-            except (ProtocolError, PathError, Exception) as e:
-                self._update_status(BlockedStatus(str(e)))
-                logger.error(str(e))
-                return
+        self._apply_status(status)
 
-        mutable_items: list[MutableMapping[str, object]] = [dict(item) for item in items]
-        if override_hostname := self.config.get("override_hostname"):
-            for item in mutable_items:
-                item["url"] = self._override_hostname(str(item["url"]), str(override_hostname))
+    def _apply(self, outcome: catalogue_state.CatalogueOutcome) -> None:
+        """Perform one decided outcome. Exhaustive match."""
+        match outcome:
+            case catalogue_state.PushCerts(material=material):
+                self._workload.push(CERT_PATH, material.server_cert, make_dirs=True)
+                self._workload.push(KEY_PATH, material.private_key, make_dirs=True)
+                self._workload.push(CA_CERT_PATH, material.ca_cert, make_dirs=True)
+            case catalogue_state.RemoveCerts():
+                for path in (KEY_PATH, CERT_PATH, CA_CERT_PATH):
+                    self._workload.remove_path(path, recursive=True)
+            case catalogue_state.PushNginxConfig(body=body):
+                self._workload.push(NGINX_CONFIG_PATH, body, make_dirs=True)
+                logger.info("Configuring NGINX web server.")
+            case catalogue_state.PushCatalogueConfig(body=body):
+                self._workload.push(CONFIG_PATH, json.dumps(body), make_dirs=True)
+                apps = body.get("apps", [])
+                app_count = len(apps) if isinstance(apps, Sequence) else 0  # pyright: ignore[reportUnknownArgumentType]
+                logger.info("Configuring %s application entries", app_count)
+            case catalogue_state.EnsureLayer(services=services):
+                self._workload.ensure_layer(self.name, services)
+            case catalogue_state.RestartNginx(reason=reason):
+                logger.info("Restarting nginx: %s", reason)
+                self._workload.restart(self.name)
+            case catalogue_state.Noop():
+                logger.debug("converged: nothing to do.")
+            case _ as unreachable:
+                assert_never(unreachable)
 
-        nginx_config_changed = self._update_web_server_config()
-        catalogue_config_changed = self._update_catalogue_config(mutable_items)
-        pebble_layer_changed = self._update_pebble_layer()
-        restart = any([nginx_config_changed, catalogue_config_changed, pebble_layer_changed])
+    def _apply_status(self, status: catalogue_state.CatalogueStatus) -> None:
+        """Map a CatalogueStatus ADT to ops statuses and set them.
 
-        if restart:
-            try:
-                self.workload.restart(self.name)
-            except ChangeError as e:
-                msg = f"Failed to restart Catalogue: {e}"
-                self._update_status(BlockedStatus(msg))
-                logger.error(msg)
-                return
+        Sets both app status (leader-only) and unit status, matching
+        the existing semantics.
+        """
+        match status:
+            case catalogue_state.StatusActive(message=message):
+                ops_status = ActiveStatus(message) if message else ActiveStatus()
+            case catalogue_state.StatusWaiting(reason=reason):
+                ops_status = WaitingStatus(reason)
+            case catalogue_state.StatusBlocked(remedy=remedy):
+                ops_status = BlockedStatus(remedy)
+            case _ as unreachable:
+                assert_never(unreachable)
 
-        self._update_status(ActiveStatus())
+        if self.unit.is_leader():
+            self.app.status = ops_status
+        self.unit.status = ops_status
 
-    def _update_pebble_layer(self) -> bool:
-        current_layer = self.workload.get_plan()
-
-        if current_layer.services == self._pebble_layer.services:
-            return False
-
-        self.workload.add_layer(self.name, self._pebble_layer, combine=True)
-        self.workload.autostart()
-        return True
-
-    def _update_catalogue_config(self, items: Sequence[Mapping[str, object]]) -> bool:
-        config = {**self.charm_config, "apps": items}
-
-        if self._running_catalogue_config == config:
-            return False
-
-        self.workload.push(
-            CONFIG_PATH,
-            json.dumps({**self.charm_config, "apps": items}),
-            make_dirs=True,
-        )
-        logger.info("Configuring %s application entries", len(items))
-        return True
-
-    def _update_web_server_config(self) -> bool:
-        config = NginxConfigBuilder(self._tls_available).build()
-
-        if self._running_nginx_config == config:
-            return False
-
-        self.workload.push(NGINX_CONFIG_PATH, config, make_dirs=True)
-        logger.info("Configuring NGINX web server.")
-        return True
-
-    def _override_hostname(self, url: str, override_hostname: str) -> str:
-        """Change the base hostname to one set in the config options."""
-        parsed_url = urlparse(url)
-        modified_url = parsed_url._replace(netloc=override_hostname)
-        return urlunparse(modified_url)
-
-    @property
-    def _running_nginx_config(self) -> str:
-        """Get the on-disk Nginx config."""
-        if not self.workload.can_connect():
-            return ""
-
-        try:
-            return str(self.workload.pull(NGINX_CONFIG_PATH, encoding="utf-8").read())
-        except (FileNotFoundError, Error) as e:
-            logger.error("Failed to retrieve Nginx config %s", e)
-            return ""
-
-    @property
-    def _running_catalogue_config(self) -> dict[str, object]:
-        """Get the on-disk Catalogue config."""
-        if not self.workload.can_connect():
-            return {}
-
-        try:
-            return json.loads(self.workload.pull(CONFIG_PATH, encoding="utf-8").read())
-        except (FileNotFoundError, Error) as e:
-            logger.error("Failed to retrieve Catalogue config %s", e)
-            return {}
-
-    @property
-    def _pebble_layer(self) -> Layer:
-        return Layer(
-            {
-                "summary": "catalogue layer",
-                "description": "pebble config layer for the catalogue",
-                "services": {
-                    self.name: {
-                        "override": "replace",
-                        "summary": "catalogue",
-                        "command": f"nginx -g 'daemon off;' -c {NGINX_CONFIG_PATH}",
-                        "startup": "enabled",
-                    }
-                },
-            }
-        )
+    # --- Properties ---
 
     @property
     def items(self) -> Sequence[Mapping[str, object]]:
@@ -320,13 +269,8 @@ class CatalogueCharm(CharmBase):
         return self._info.items
 
     @property
-    def workload(self) -> Container:
-        """The main workload of the charm."""
-        return self.unit.get_container(self.name)
-
-    @property
     def charm_config(self) -> dict[str, object]:
-        """The part of the charm config set through `juju config`."""
+        """The part of the charm config set through ``juju config``."""
         return {
             "title": self.model.config["title"],
             "tagline": self.model.config["tagline"],
@@ -348,16 +292,22 @@ class CatalogueCharm(CharmBase):
         return int(parsed_url.port or 80)
 
     @property
-    def _tls_config(self) -> TLSConfig | None:
+    def _tls_config(self) -> TlsMaterial | None:
+        """TLS material from the certificates relation, if available."""
         certificates, key = self._cert_requirer.get_assigned_certificate(
             certificate_request=self._csr_attributes
         )
         if not (key and certificates):
             return None
-        return TLSConfig(certificates.certificate.raw, certificates.ca.raw, key.raw)
+        return TlsMaterial(
+            server_cert=certificates.certificate.raw,
+            ca_cert=certificates.ca.raw,
+            private_key=key.raw,
+        )
 
     @property
     def _tls_available(self) -> bool:
+        """Whether TLS material is available from the relation."""
         return bool(self._tls_config)
 
 

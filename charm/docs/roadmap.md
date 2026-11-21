@@ -30,13 +30,18 @@ Introduce the decide/act split without changing observable behaviour.
 - `src/catalogue_state.py`: `CatalogueIntent` (config + relation-derived
   intent), frozen `CatalogueState` snapshot, `CatalogueOutcome` ADT, `fetch`
   (via a `Facts` protocol), `compute`, and the status decisions
-  (`status_plan`, `status_without_intent`).
+  (`status_plan`, `status_without_intent`). **Done 2026-11-21.**
 - `src/workload.py`: all Pebble container operations (push/pull/remove_path,
   layers, autostart, replan, restart, get_plan); never imports `ops`.
+  **Done 2026-11-21.**
 - `src/nginx_config.py` stays pure; `charm.py` keeps its current handlers but
-  routes them through fetch/compute/apply.
+  routes them through fetch/compute/apply. **Done 2026-11-21.**
 - Acceptance: `_update_*` bool-returning mutators gone; unit tests for the
-  core need no mocks; existing behaviour unchanged.
+  core need no mocks; behaviour unchanged except three approved deltas:
+  certs are re-pushed whenever the container does not show them (the
+  `push_certs` parameter is gone), restart verifies the service came up,
+  and a corrupt on-disk config.json self-heals instead of erroring.
+  **Done 2026-11-21** — `tox -e fmt,lint,static,unit,flaplint` green.
 
 ## Stage 2 — Single reconciler
 

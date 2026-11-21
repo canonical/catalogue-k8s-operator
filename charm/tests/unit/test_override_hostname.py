@@ -1,6 +1,7 @@
 import json
 import logging
 
+from ops.model import ActiveStatus
 from ops.testing import Container, Context, Relation, State
 
 from charm import CatalogueCharm
@@ -36,7 +37,12 @@ def test_override_hostname() -> None:
 
     state_out = context.run(context.on.config_changed(), state)
 
-    container_fs = state_out.get_container(container_name).get_filesystem(context)  # pyright: ignore[reportUnknownMemberType]
+    # THEN the unit converged to Active — this is the unmocked
+    # regression check that a mis-shaped Pebble layer (an empty
+    # services key) cannot hide behind mocked workload seams.
+    assert state_out.unit_status == ActiveStatus()
+
+    container_fs = state_out.get_container(container_name).get_filesystem(context)
     cfg_file = container_fs / "web" / "config.json"
 
     config = json.loads(cfg_file.read_text())
@@ -51,7 +57,10 @@ def test_override_hostname() -> None:
 
     state_out = context.run(context.on.config_changed(), state)
 
-    container_fs = state_out.get_container(container_name).get_filesystem(context)  # pyright: ignore[reportUnknownMemberType]
+    # THEN the unit converged to Active here too
+    assert state_out.unit_status == ActiveStatus()
+
+    container_fs = state_out.get_container(container_name).get_filesystem(context)
     cfg_file = container_fs / "web" / "config.json"
 
     config = json.loads(cfg_file.read_text())

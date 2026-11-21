@@ -22,16 +22,14 @@ the thing to fix.**
 
 ## Where we are
 
-The charm works upstream: events funnel into `_configure`, which reads back
-the running nginx and catalogue configs before deciding to restart — the
-verify instinct already exists. Not yet true: a single `_reconcile`
-(per-event handlers remain), a pure core (`catalogue_state.py`), the
-decide/act split (the `_update_*` methods mutate *and* return changed-flags).
-Stage 0 (toolchain alignment) landed 2026-11-20: `pyproject.toml` now
-enforces `E501`/`W505` (99/72), `ANN`, `D`, `PLC0415`, and pyright strict at
-Python 3.14 over `src` and `tests`; `tox -e fmt,lint,static,unit` is green.
-`docs/roadmap.md` is the source of truth for staged delivery — check it before
-treating a missing piece as a defect rather than as unstarted work.
+The charm works upstream: events funnel into `_reconcile`, which builds
+intent, fetches running state via the `Workload` module, computes outcomes
+purely in `catalogue_state.py`, and applies them. The decide/act split
+landed 2026-11-21 (stage 1): `_update_*` bool-returning mutators are gone;
+`catalogue_state.py` is the pure core; `workload.py` owns all Pebble
+operations. Not yet true: the collapse of the per-event handlers into that
+single `_reconcile` (stage 2), the test-layer split (stage 3), and the
+docs/ADRs (stage 4).
 
 The public interface — relations, config options, the `get-url` action — is
 what `charmcraft.yaml` declares; that YAML is the list, and this file
@@ -56,7 +54,7 @@ review.
    deferrable — including `config_changed`, `upgrade_charm`, relation events,
    and Pebble events (defer until `can_connect()`) — goes through `_reconcile`.
    The one allowed exception is `upgrade_charm` *if* it needs migration logic
-   distinct from convergence. Today the charm funnels into `_configure` from
+   distinct from convergence. Today the charm funnels into `_reconcile` from
    per-event handlers; collapsing them is roadmap work, and new code must not
    widen the funnel.
 2. **Charm logic and workload logic are separate modules.** `src/charm.py`
@@ -169,10 +167,10 @@ docs/
   roadmap.md              # staged delivery plan (overview.md and pattern.md land with the refactor)
   adr/                    # numbered decision records; starts with the refactor. Load `new-adr` first.
 src/
-  charm.py                # CatalogueCharm: today per-event handlers -> _configure; target: _reconcile
+  charm.py                # CatalogueCharm: today per-event handlers -> _reconcile; target: single _reconcile + collect_unit_status
   nginx_config.py         # pure nginx config rendering — no ops imports, must stay that way
-  catalogue_state.py      # (planned) pure core: intent, state, outcome ADT, fetch/compute, status
-  workload.py             # (planned) Pebble container operations; never imports ops
+  catalogue_state.py      # pure core: intent, state, outcome ADT, fetch/compute, status
+  workload.py             # Pebble container operations; never imports ops
 lib/charms/               # vendored Charmhub-hosted interface libraries
 tests/
   unit/                   # ops.testing; charm tests mock the workload module
