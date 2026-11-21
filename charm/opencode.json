@@ -1,0 +1,47 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openrouter/anthropic/claude-opus-5",
+  "small_model": "openrouter/anthropic/claude-sonnet-5",
+  "default_agent": "charm-architect",
+  "references": {
+    "ops": {
+      "repository": "canonical/operator",
+      "branch": "main",
+      "description": "The ops framework itself. Use examples/k8s-2-configurable for the layer-plus-replan pattern shared across events, k8s-5-observe for observability wiring, and testing/ for ops.testing container simulation internals."
+    },
+    "fp-edge": {
+      "repository": "canonical/fp-edge-canonical",
+      "branch": "master",
+      "description": "Workshop material on functional-style charms. Read code/src/charms_examples/case study/step2_functional for the fetch/compute/apply split and the outcome ADT. Educational only, not production code — see the charm-functional-style skill for caveats.",
+      "hidden": true
+    },
+    "flaplint": {
+      "repository": "michaeldmitry/flaplint",
+      "branch": "main",
+      "description": "Static analyser for relation-databag ordering churn. Read docs/taint-model.md and docs/sinks-and-findings.md to interpret a finding.",
+      "hidden": true
+    }
+  },
+  "permission": {
+    "bash": {
+      "*": "allow",
+      "git commit*": "deny",
+      "git push*": "deny",
+      "gh pr create*": "deny",
+      "gh pr merge*": "deny",
+      "gh release*": "deny",
+      "git clean*": "deny",
+      "git reset --hard*": "deny",
+      "git restore*": "deny",
+      "git checkout -- *": "deny"
+    }
+  },
+  "agent": {
+    "explore": {
+      "model": "openrouter/anthropic/claude-sonnet-5"
+    },
+    "general": {
+      "model": "openrouter/anthropic/claude-sonnet-5"
+    }
+  }
+}
