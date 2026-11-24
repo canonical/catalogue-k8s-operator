@@ -87,3 +87,9 @@ Introduce the decide/act split without changing observable behaviour.
   architecture).
 - Acceptance: `AGENTS.md` "Read this first" links resolve; ADRs cited from
   code where a rule's reason is no longer obvious.
+  **Done 2026-11-21** — all five documents landed; ADR-0001 §5.2 records the
+  two open status decisions (Waiting-not-Maintenance for container-not-ready;
+  Blocked-with-remedy, no in-hook retry) and the status-policy citations from
+  `src/charm.py` and `src/catalogue_state.py` point at it; `AGENTS.md`
+  "Read this first" now leads with `overview.md`; the layout tree lists the
+  docs. The refactor is complete.

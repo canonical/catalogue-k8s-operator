@@ -169,6 +169,9 @@ class CatalogueCharm(CharmBase):
             for outcome in outcomes:
                 self._apply(outcome)
         except (Error, WorkloadError) as e:
+            # No in-hook retry by decision: update_status (observed) is
+            # the retry, at worst one cadence of a truthful Blocked.
+            # See ADR-0001 §5.2 before adding a retry loop here.
             self._reconcile_failure = BlockedStatus(
                 f"Workload operation failed: {e}; "
                 f"check the container with "

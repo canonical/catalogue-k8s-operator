@@ -293,8 +293,8 @@ def test_catalogue_config_returns_empty_on_non_mapping_json() -> None:
     assert result == {}
 
 
-def test_layer_services_returns_plan() -> None:
-    """layer_services reads the running Pebble plan services."""
+def test_plan_services_returns_plan() -> None:
+    """plan_services reads the running Pebble plan services."""
     # GIVEN a container with a plan
     fake = FakeContainer()
     # Pre-populate the plan via add_layer so get_plan returns it.
@@ -314,7 +314,7 @@ def test_layer_services_returns_plan() -> None:
     wl = _workload(fake)
 
     # WHEN the layer services are read
-    result = wl.layer_services()
+    result = wl.plan_services()
 
     # THEN the services dict matches
     assert "catalogue" in result

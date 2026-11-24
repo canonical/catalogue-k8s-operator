@@ -122,8 +122,8 @@ class Workload:
             return {}
         return cast(Mapping[str, object], result)
 
-    def layer_services(self) -> Mapping[str, Mapping[str, str]]:
-        """Read the running Pebble layer services dict.
+    def plan_services(self) -> Mapping[str, Mapping[str, str]]:
+        """Read the services section of the running Pebble plan.
 
         Returns:
             A mapping of service name to service config dict.

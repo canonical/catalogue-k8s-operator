@@ -94,7 +94,7 @@ class FakeFacts:
         can_connect: bool = True,
         nginx_config: str = "",
         catalogue_config: Mapping[str, object] | None = None,
-        layer_services: Mapping[str, Mapping[str, str]] | None = None,
+        plan_services: Mapping[str, Mapping[str, str]] | None = None,
         certs: bool = False,
     ) -> None:
         """Initialise with configurable fake facts."""
@@ -103,8 +103,8 @@ class FakeFacts:
         self._catalogue_config: Mapping[str, object] = (
             catalogue_config if catalogue_config is not None else {}
         )
-        self._layer_services: Mapping[str, Mapping[str, str]] = (
-            layer_services if layer_services is not None else {}
+        self._plan_services: Mapping[str, Mapping[str, str]] = (
+            plan_services if plan_services is not None else {}
         )
         self._certs = certs
 
@@ -117,8 +117,8 @@ class FakeFacts:
     def catalogue_config(self) -> Mapping[str, object]:
         return self._catalogue_config
 
-    def layer_services(self) -> Mapping[str, Mapping[str, str]]:
-        return self._layer_services
+    def plan_services(self) -> Mapping[str, Mapping[str, str]]:
+        return self._plan_services
 
     def certs(self) -> bool:
         return self._certs
@@ -146,7 +146,7 @@ def test_fetch_container_ready() -> None:
         can_connect=True,
         nginx_config="some-nginx-config",
         catalogue_config={"title": "Test"},
-        layer_services={"catalogue": {"override": "replace"}},
+        plan_services={"catalogue": {"override": "replace"}},
         certs=True,
     )
 
@@ -157,7 +157,7 @@ def test_fetch_container_ready() -> None:
     assert isinstance(state, ContainerReady)
     assert state.running_nginx_config == "some-nginx-config"
     assert state.running_catalogue_config == {"title": "Test"}
-    assert state.running_layer_services == {"catalogue": {"override": "replace"}}
+    assert state.plan_services == {"catalogue": {"override": "replace"}}
     assert state.running_certs is True
 
 
@@ -252,14 +252,14 @@ def _intent(
 def _ready(
     running_nginx_config: str = EXPECTED_NGINX_HTTP,
     running_catalogue_config: Mapping[str, object] | None = None,
-    running_layer_services: Mapping[str, Mapping[str, str]] | None = None,
+    plan_services: Mapping[str, Mapping[str, str]] | None = None,
     running_certs: bool = False,
 ) -> ContainerReady:
     """Build a ContainerReady with defaults for compute tests."""
     if running_catalogue_config is None:
         running_catalogue_config = {**CHARM_CONFIG, "apps": ITEMS}
-    if running_layer_services is None:
-        running_layer_services = {
+    if plan_services is None:
+        plan_services = {
             "catalogue": {
                 "override": "replace",
                 "summary": "catalogue",
@@ -270,7 +270,7 @@ def _ready(
     return ContainerReady(
         running_nginx_config=running_nginx_config,
         running_catalogue_config=running_catalogue_config,
-        running_layer_services=running_layer_services,
+        plan_services=plan_services,
         running_certs=running_certs,
     )
 
@@ -435,7 +435,7 @@ def test_compute_all_three_deltas_yields_all_outcomes() -> None:
     state = _ready(
         running_nginx_config="old-nginx",
         running_catalogue_config={**CHARM_CONFIG, "apps": ITEMS},
-        running_layer_services={
+        plan_services={
             "catalogue": {
                 "override": "replace",
                 "summary": "catalogue",

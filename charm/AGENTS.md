@@ -10,25 +10,34 @@ allowed where the Kubernetes API is genuinely needed.
 
 ## Read this first
 
-1. [`docs/roadmap.md`](docs/roadmap.md) — what is built, what is unstarted, and
-   the staged plan for adopting the fetch-compute-apply pattern.
-2. The non-negotiables below — the contract that no gate fully checks for you.
+1. [`docs/overview.md`](docs/overview.md) — the two-minute map of what
+   this charm is and how its pieces fit.
+2. [`docs/roadmap.md`](docs/roadmap.md) — what is built, what is
+   unstarted, and the staged plan that delivered the
+   fetch-compute-apply pattern (all four stages landed).
+3. The non-negotiables below — the contract that no gate fully checks
+   for you.
 
-`docs/overview.md` and `docs/pattern.md` (the pattern taught with a small
-example that is not Catalogue) are deliverables of the refactor, recorded in
-the roadmap. And the precedence rule for everything in this repo: **where a
-skill and this file disagree, the skill is newer and wins — this file is then
-the thing to fix.**
+[`docs/pattern.md`](docs/pattern.md) teaches the pattern with a small
+example that is not Catalogue;
+[`docs/workload-constraints.md`](docs/workload-constraints.md) is the
+verified catalog of which Kubernetes/Pebble signals lie. And the
+precedence rule for everything in this repo: **where a skill and this
+file disagree, the skill is newer and wins — this file is then the
+thing to fix.**
 
 ## Where we are
 
-The charm works upstream: events funnel into a single `_reconcile`, which
-builds intent, fetches running state via the `Workload` module, computes
-outcomes purely in `catalogue_state.py`, and applies them. Status is
-reported by `_on_collect_status` (observed for both `collect_unit_status`
-and `collect_app_status`). The decide/act split landed 2026-11-21 (stage 1);
-the single-reconciler collapse landed 2026-11-21 (stage 2); the test-layer
-split landed 2026-11-21 (stage 3). Not yet true: the docs/ADRs (stage 4).
+The refactor landed in full. Events funnel into a single `_reconcile`,
+which builds intent, fetches running state via the `Workload` module,
+computes outcomes purely in `catalogue_state.py`, and applies them.
+Status is reported by `_on_collect_status` (observed for both
+`collect_unit_status` and `collect_app_status`). All four roadmap
+stages landed 2026-11-21: the decide/act split (stage 1), the
+single-reconciler collapse (stage 2), the test-layer split (stage 3,
+every `src/` line covered or excluded at its exclusion site), and the
+docs/ADRs (stage 4 — ADR-0001 for the pattern and its status policy,
+ADR-0002 for the toolchain).
 
 The public interface — relations, config options, the `get-url` action — is
 what `charmcraft.yaml` declares; that YAML is the list, and this file
@@ -95,27 +104,28 @@ review.
    serves plain HTTP with none. Note that Juju does **not** enforce `optional` —
    it is documentation. The guarantee lives in `_reconcile` and
    `collect_unit_status`, so a correct `charmcraft.yaml` is not evidence.
-6. **Never trust a success signal you did not verify.** The Kubernetes shape of
-   the lie: `can_connect()` returns true long before nginx serves anything;
-   `restart()` and `replan()` returning does not mean the service is healthy; a
-   certificate "available" on the relation is not a file on disk — and the
-   container filesystem is ephemeral, so certs pushed yesterday are gone after
-   an upgrade (the existing `push_certs=True` on `pebble_ready` and
-   `upgrade_charm` exists for exactly that reason — keep it); an ingress URL
-   in a databag is not a reachable route. In every case, read back the state
-   the operation was supposed to produce. The charm already pulls the running
-   nginx and catalogue configs before deciding to restart — that is the right
-   instinct; the refactor moves the comparison into the pure core so an exit
-   code or a returned flag is never the evidence.
-7. **Decide, then act — never both in one function.** A function that performs
-   an effect *and* returns a flag describing what it decided cannot be tested
-   without running the effect. Pure functions compute an outcome value; impure
-   functions consume it. The detection signal is cheap: **if a test needs a
-   mock to reach a decision, this rule was broken.** The existing
-   `_update_pebble_layer`, `_update_catalogue_config`, and
-   `_update_web_server_config` mutate *and* return changed-flags — exactly the
-   shape the refactor eliminates: fetch the running state, compute outcomes
-   purely, apply them.
+ 6. **Never trust a success signal you did not verify.** The Kubernetes shape of
+    the lie: `can_connect()` returns true long before nginx serves anything;
+    `restart()` and `replan()` returning does not mean the service is healthy; a
+    certificate "available" on the relation is not a file on disk — and the
+    container filesystem is ephemeral, so certs pushed yesterday are gone after
+    an upgrade (the baseline's `push_certs=True` call sites existed for exactly
+    that reason; the refactor replaces the flag with certs-as-compared-state —
+    the reconcile re-pushes whenever the state does not show them); an ingress
+    URL in a databag is not a reachable route. In every case, read back the
+    state the operation was supposed to produce. The charm fetches the running
+    nginx and catalogue configs before deciding to restart — the comparison
+    lives in the pure core, so an exit code or a returned flag is never the
+    evidence.
+ 7. **Decide, then act — never both in one function.** A function that performs
+    an effect *and* returns a flag describing what it decided cannot be tested
+    without running the effect. Pure functions compute an outcome value; impure
+    functions consume it. The detection signal is cheap: **if a test needs a
+    mock to reach a decision, this rule was broken.** The baseline's
+    `_update_pebble_layer`, `_update_catalogue_config`, and
+    `_update_web_server_config` mutated *and* returned changed-flags — the
+    shape the refactor eliminated (stage 1): fetch the running state, compute
+    outcomes purely, apply them.
 8. **Inheritance only where a framework demands it.** `ops.CharmBase` is the
    one mandatory subclass; charm libraries (`CatalogueProvider`/
    `CatalogueConsumer`, `IngressPerAppRequirer`, `TLSCertificatesRequiresV4`,
@@ -163,8 +173,11 @@ uv.lock
 tox.ini
 pyright-lib/              # pyright project for lib/charms/catalogue_k8s (standard mode)
 docs/
-  roadmap.md              # staged delivery plan (overview.md and pattern.md land with the refactor)
-  adr/                    # numbered decision records; starts with the refactor. Load `new-adr` first.
+  overview.md             # the two-minute map
+  roadmap.md              # staged delivery plan — all stages landed
+  pattern.md              # fetch-compute-apply taught with a small non-Catalogue example
+  workload-constraints.md # verified catalog of the signals that lie
+  adr/                    # numbered decision records (ADR-0001 pattern, ADR-0002 toolchain)
 src/
   charm.py                # CatalogueCharm: single _reconcile + _on_collect_status
   nginx_config.py         # pure nginx config rendering — no ops imports, must stay that way

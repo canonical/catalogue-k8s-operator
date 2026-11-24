@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "catalogue"
 
+# Compared against the running plan's services, which pebble's
+# Service.to_dict() returns with falsy fields dropped: declare only
+# non-empty fields here, or the comparison never matches and every
+# reconcile re-applies the layer and restarts nginx.
 LAYER_SERVICES: Mapping[str, Mapping[str, str]] = {
     SERVICE_NAME: {
         "override": "replace",
@@ -35,6 +39,8 @@ LAYER_SERVICES: Mapping[str, Mapping[str, str]] = {
     }
 }
 
+# Upstream's exact message, kept by decision (Waiting, not
+# Maintenance, for container-not-ready). See ADR-0001 §5.2.
 WAITING_FOR_PEBBLE_MESSAGE = "Waiting for Pebble ready"
 
 
@@ -65,7 +71,7 @@ class CatalogueIntent:
     """Complete desired config.json body, including ``apps``."""
 
     layer_services: Mapping[str, Mapping[str, str]]
-    """Pebble layer services dict (constant)."""
+    """Services for the layer the charm adds (constant)."""
 
     tls: TlsMaterial | None
     """TLS material when available, None otherwise."""
@@ -89,8 +95,8 @@ class ContainerReady:
     running_catalogue_config: Mapping[str, object]
     """The config.json currently on disk (empty dict if absent)."""
 
-    running_layer_services: Mapping[str, Mapping[str, str]]
-    """The services dict from the running Pebble plan."""
+    plan_services: Mapping[str, Mapping[str, str]]
+    """Services of the running Pebble plan (all layers combined)."""
 
     running_certs: bool
     """Whether all three cert files (cert, key, CA) exist on disk."""
@@ -121,8 +127,8 @@ class Facts(Protocol):
         """Read the on-disk catalogue config. Returns {} on failure."""
         ...
 
-    def layer_services(self) -> Mapping[str, Mapping[str, str]]:
-        """Read the running Pebble layer services dict."""
+    def plan_services(self) -> Mapping[str, Mapping[str, str]]:
+        """Read the services section of the running Pebble plan."""
         ...
 
     def certs(self) -> bool:
@@ -227,7 +233,7 @@ def fetch(facts: Facts) -> CatalogueState:
     return ContainerReady(
         running_nginx_config=facts.nginx_config(),
         running_catalogue_config=facts.catalogue_config(),
-        running_layer_services=facts.layer_services(),
+        plan_services=facts.plan_services(),
         running_certs=facts.certs(),
     )
 
@@ -315,7 +321,7 @@ def _compute_ready(
 
     nginx_changed = state.running_nginx_config != intent.nginx_config
     catalogue_changed = state.running_catalogue_config != intent.catalogue_config
-    layer_changed = state.running_layer_services != intent.layer_services
+    layer_changed = state.plan_services != intent.layer_services
 
     if nginx_changed:
         outcomes.append(PushNginxConfig(body=intent.nginx_config))
