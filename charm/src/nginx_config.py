@@ -68,9 +68,14 @@ http {{
 
 
 class NginxConfigBuilder:
-    """Class."""
+    """Build nginx configuration files."""
 
-    def __init__(self, tls: bool = False):
+    def __init__(self, tls: bool = False) -> None:
+        """Initialize the config builder.
+
+        Args:
+            tls: Whether to generate an HTTPS config.
+        """
         self._tls = tls
 
     def _nginx_config(self, service: str) -> str:
@@ -84,7 +89,7 @@ class NginxConfigBuilder:
         """
         )
 
-    def build(self):
+    def build(self) -> str:
         """Build Nginx config file."""
         if self._tls:
             return self._nginx_config(HTTPS_SERVICE)

@@ -19,13 +19,15 @@ PROMETHEUS_APP_NAME = "prometheus-k8s"
 
 
 @pytest.mark.juju_setup
-def test_build_and_deploy(juju: jubilant.Juju, charm_path: Path, resources: dict):
+def test_build_and_deploy(
+    juju: jubilant.Juju, charm_path: Path, resources: dict[str, str]
+) -> None:
     """Deploy the charm and wait for it to become active."""
     juju.deploy(charm_path, app=APP_NAME, resources=resources)
     juju.wait(active_idle, timeout=5 * 60)
 
 
-def test_tls(juju: jubilant.Juju):
+def test_tls(juju: jubilant.Juju) -> None:
     """Test TLS integration with self-signed-certificates."""
     juju.deploy(
         "self-signed-certificates",
@@ -42,8 +44,8 @@ def test_tls(juju: jubilant.Juju):
     assert response.status_code == 200
 
 
-def test_app_integration(juju: jubilant.Juju):
-    """Test that catalogue can integrate apps and display them in config.json."""
+def test_app_integration(juju: jubilant.Juju) -> None:
+    """Test catalogue can integrate apps and display in config.json."""
     juju.deploy(
         PROMETHEUS_APP_NAME,
         app=PROMETHEUS_APP_NAME,
@@ -53,7 +55,7 @@ def test_app_integration(juju: jubilant.Juju):
     juju.integrate(APP_NAME, PROMETHEUS_APP_NAME)
     juju.wait(active_idle, timeout=5 * 60)
 
-    # retrieve the content of /web/config.json which holds application data in the catalogue
+    # retrieve /web/config.json which holds app data in the catalogue
     new_config = juju.ssh(f"{APP_NAME}/0", "cat /web/config.json", container="catalogue")
     config_dict = json.loads(new_config)
     first_app_name = config_dict["apps"][0]["name"]

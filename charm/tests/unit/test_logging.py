@@ -8,8 +8,8 @@ from ops.testing import Container, Context, Relation, State
 from charm import CatalogueCharm
 
 
-def test_charm_initializes_with_logging_relation():
-    """The charm should initialize without errors when a logging relation is present."""
+def test_charm_initializes_with_logging_relation() -> None:
+    """The charm should initialize without errors with logging."""
     context = Context(CatalogueCharm)
 
     container = Container(name="catalogue", can_connect=True)
@@ -24,12 +24,12 @@ def test_charm_initializes_with_logging_relation():
     # WHEN a relation-changed event fires on the logging relation
     state_out = context.run(context.on.relation_changed(logging_relation), state)
 
-    # THEN no exceptions are raised (charm handles the relation gracefully)
+    # THEN no exceptions are raised (charm handles the relation)
     assert state_out is not None
 
 
-def test_charm_starts_without_logging_relation():
-    """The charm should start fine without the optional logging relation."""
+def test_charm_starts_without_logging_relation() -> None:
+    """The charm should start fine without the logging relation."""
     context = Context(CatalogueCharm)
 
     container = Container(name="catalogue", can_connect=True)

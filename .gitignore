@@ -2,6 +2,8 @@ __pycache__
 *.charm
 *.rock
 .coverage
+.tox
+.tox.old*
 
 # Local .terraform directories
 **/.terraform/*

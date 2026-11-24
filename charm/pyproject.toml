@@ -6,7 +6,7 @@ version = "0.0"
 requires-python = "~=3.14.0"
 
 dependencies = [
-  "ops[tracing]>=2.20.0",
+  "ops[tracing]>=3.10.0",
   "lightkube",
   "lightkube-models",
   "jsonschema",
@@ -28,6 +28,8 @@ dev = [
   "httpcore",
   # Unit
   "pytest",
+  # ops.testing re-exports Scenario's Context/State only when this is installed
+  "ops-scenario>=8",
   "coverage[toml]",
   "deepdiff",
   "fs",
@@ -48,38 +50,55 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
-
-# Formatting tools configuration
-[tool.black]
-line-length = 99
-target-version = ["py38"]
+fail_under = 90
 
 # Linting tools configuration
 [tool.ruff]
 line-length = 99
+target-version = "py314"
 extend-exclude = ["__pycache__", "*.egg_info"]
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "C", "N", "R", "D", "I001"]
-# Ignore E501 because using black creates errors with this
-# Ignore D107 Missing docstring in __init__
-ignore = ["E501", "D107"]
+select = ["E", "W", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF", "ANN", "D", "PLC0415"]
 # D100, D101, D102, D103: Ignore missing docstrings in tests
 per-file-ignores = {"tests/*" = ["D100","D101","D102","D103"]}
 
-[lint.pydocstyle]
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 72
+
+[tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.pyright]
+# src and tests at strict; the owned lib is deliberately NOT included here
+# (its unannotated types would pollute strict analysis of src) — the static
+# tox env checks it separately at standard mode via pyright-lib/.
 extraPaths = ["src", "lib"]
-pythonVersion = "3.8"
+pythonVersion = "3.14"
 pythonPlatform = "Linux"
+typeCheckingMode = "strict"
+include = ["src", "tests"]
+# Only the bracketed `# pyright: ignore[rule]` spelling works (AGENTS.md):
+# mypy's `# type: ignore` suppresses nothing here, and a suppression that
+# goes stale fails the gate.
+enableTypeIgnoreComments = false
+reportUnnecessaryTypeIgnoreComment = "error"
+
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+reportPrivateUsage = false
 
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "INFO"
 addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
 markers = ["juju_setup", "juju_teardown"]
+filterwarnings = [
+    "error",
+    # Vendored-library deprecations we cannot fix:
+    "ignore::DeprecationWarning:charms.tls_certificates_interface.v4.tls_certificates",
+    "ignore::DeprecationWarning:charms.loki_k8s.v1.loki_push_api",
+]
 
 [tool.codespell]
 skip = ".git,.tox,build,venv*"
